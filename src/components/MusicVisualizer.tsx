@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { AudioAnalyzer, type AudioBands } from '@/lib/AudioAnalyzer'
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode } from '@/lib/visualizations'
@@ -58,9 +59,12 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
     // Post-processing with bloom
     const composer = new EffectComposer(renderer)
+    
+    // RenderPass must be first
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
+    // Bloom effect
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
       0.8,  // strength
@@ -68,6 +72,10 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       0.2   // threshold
     )
     composer.addPass(bloomPass)
+
+    // OutputPass must be last for proper tone mapping
+    const outputPass = new OutputPass()
+    composer.addPass(outputPass)
 
     // Particle geometry
     const geometry = new THREE.BufferGeometry()

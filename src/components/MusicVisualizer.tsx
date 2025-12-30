@@ -15,11 +15,20 @@ interface SceneRefs {
   originalPositions: Float32Array
 }
 
-export default function MusicVisualizer() {
+interface MusicVisualizerProps {
+  audioSource: 'mic' | 'file'
+  audioFile: File | null
+  onBack: () => void
+}
+
+export default function MusicVisualizer({ audioSource, audioFile, onBack }: MusicVisualizerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isListening, setIsListening] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
   const [currentMode, setCurrentMode] = useState<VisualizationMode>(visualizations[0])
   const [error, setError] = useState<string | null>(null)
+  const [fileName, setFileName] = useState<string | null>(null)
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
   const sceneRef = useRef<SceneRefs | null>(null)
   const animationRef = useRef<number>(0)
@@ -30,9 +39,8 @@ export default function MusicVisualizer() {
     const width = containerRef.current.clientWidth
     const height = containerRef.current.clientHeight
 
-    // Scene setup
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x0a0a0f)
+    scene.background = new THREE.Color(0x050508)
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
     camera.position.z = 50
@@ -42,14 +50,12 @@ export default function MusicVisualizer() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     containerRef.current.appendChild(renderer.domElement)
 
-    // Particle geometry
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const colors = new Float32Array(PARTICLE_COUNT * 3)
     const sizes = new Float32Array(PARTICLE_COUNT)
     const alphas = new Float32Array(PARTICLE_COUNT)
 
-    // Initialize with current mode
     currentMode.initParticles(positions, colors, PARTICLE_COUNT)
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -91,7 +97,6 @@ export default function MusicVisualizer() {
 
     mode.initParticles(positions, colors, PARTICLE_COUNT)
 
-    // Copy to original positions for animation reference
     for (let i = 0; i < positions.length; i++) {
       originalPositions[i] = positions[i]
     }
@@ -118,11 +123,10 @@ export default function MusicVisualizer() {
       const colors = particles.geometry.attributes.customColor.array as Float32Array
 
       let bands: AudioBands = { bass: 0.1, mid: 0.1, high: 0.1, overall: 0.1 }
-      if (analyzerRef.current && isListening) {
+      if (analyzerRef.current && (isListening || isPlaying)) {
         bands = analyzerRef.current.getBands()
       }
 
-      // Run current visualization's animate function
       currentMode.animate(
         positions,
         originalPositions,
@@ -136,7 +140,6 @@ export default function MusicVisualizer() {
       particles.geometry.attributes.position.needsUpdate = true
       particles.geometry.attributes.size.needsUpdate = true
 
-      // Gentle rotation
       particles.rotation.y += 0.002 + bands.overall * 0.01
       particles.rotation.x += 0.001
 
@@ -165,15 +168,27 @@ export default function MusicVisualizer() {
         sceneRef.current = null
       }
     }
-  }, [initScene, isListening, currentMode])
+  }, [initScene, isListening, isPlaying, currentMode])
 
-  // Handle mode changes
+  // Auto-start based on audio source
+  useEffect(() => {
+    if (audioSource === 'mic') {
+      startMic()
+    } else if (audioSource === 'file' && audioFile) {
+      startFile(audioFile)
+    }
+
+    return () => {
+      stopAudio()
+    }
+  }, [])
+
   const handleModeChange = useCallback((mode: VisualizationMode) => {
     setCurrentMode(mode)
     updateParticleLayout(mode)
   }, [updateParticleLayout])
 
-  const startListening = async () => {
+  const startMic = async () => {
     try {
       analyzerRef.current = new AudioAnalyzer()
       await analyzerRef.current.initMic()
@@ -185,25 +200,67 @@ export default function MusicVisualizer() {
     }
   }
 
-  const stopListening = () => {
+  const startFile = async (file: File) => {
+    try {
+      setFileName(file.name)
+      const url = URL.createObjectURL(file)
+      const audio = new Audio(url)
+      audio.crossOrigin = 'anonymous'
+      audioRef.current = audio
+
+      analyzerRef.current = new AudioAnalyzer()
+      await analyzerRef.current.initAudioElement(audio)
+
+      audio.play()
+      setIsPlaying(true)
+      setError(null)
+
+      audio.onended = () => setIsPlaying(false)
+    } catch (err) {
+      console.error('Audio file error:', err)
+      setError('Failed to load audio file.')
+    }
+  }
+
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
+    }
     analyzerRef.current?.disconnect()
     analyzerRef.current = null
     setIsListening(false)
+    setIsPlaying(false)
+  }
+
+  const togglePlayback = () => {
+    if (!audioRef.current) return
+    if (isPlaying) {
+      audioRef.current.pause()
+      setIsPlaying(false)
+    } else {
+      audioRef.current.play()
+      setIsPlaying(true)
+    }
   }
 
   return (
-    <div className="w-full h-screen bg-gray-950 flex flex-col relative">
+    <div className="w-full h-screen bg-[#050508] flex flex-col relative">
       <Controls
         isListening={isListening}
+        isPlaying={isPlaying}
+        audioSource={audioSource}
+        fileName={fileName}
         currentMode={currentMode}
         modes={visualizations}
         error={error}
-        onToggleListening={isListening ? stopListening : startListening}
+        onTogglePlayback={togglePlayback}
         onModeChange={handleModeChange}
+        onBack={onBack}
       />
 
-      <div className="absolute bottom-4 left-4 z-10 text-white/40 text-xs">
-        {isListening ? 'Listening to audio...' : 'Click Start Mic to begin'}
+      <div className="absolute bottom-4 left-4 z-10 text-white/30 text-xs tracking-widest">
+        {isListening ? 'LISTENING' : isPlaying ? 'PLAYING' : 'PAUSED'}
       </div>
 
       <div ref={containerRef} className="flex-1" />

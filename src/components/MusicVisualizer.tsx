@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { AudioAnalyzer, type AudioBands } from '@/lib/AudioAnalyzer'
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode } from '@/lib/visualizations'
-import Controls from './Controls'
 
-const PARTICLE_COUNT = 8000
+const PARTICLE_COUNT = 10000
 
 interface SceneRefs {
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
+  composer: EffectComposer
   particles: THREE.Points
   originalPositions: Float32Array
 }
@@ -27,6 +30,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
   const [isListening, setIsListening] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentMode, setCurrentMode] = useState<VisualizationMode>(visualizations[0])
+  const [showUI, setShowUI] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
@@ -40,7 +44,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     const height = containerRef.current.clientHeight
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x050508)
+    scene.background = new THREE.Color(0x06060a)
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
     camera.position.z = 50
@@ -48,8 +52,24 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.5
     containerRef.current.appendChild(renderer.domElement)
 
+    // Post-processing with bloom
+    const composer = new EffectComposer(renderer)
+    const renderPass = new RenderPass(scene, camera)
+    composer.addPass(renderPass)
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(width, height),
+      0.8,  // strength
+      0.4,  // radius
+      0.2   // threshold
+    )
+    composer.addPass(bloomPass)
+
+    // Particle geometry
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const colors = new Float32Array(PARTICLE_COUNT * 3)
@@ -60,7 +80,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       sizes[i] = 1 + Math.random() * 2
-      alphas[i] = 0.3 + Math.random() * 0.7
+      alphas[i] = 0.4 + Math.random() * 0.6
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -83,6 +103,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       scene,
       camera,
       renderer,
+      composer,
       particles,
       originalPositions: positions.slice()
     }
@@ -117,7 +138,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
       if (!sceneRef.current) return
 
-      const { scene, camera, renderer, particles, originalPositions } = sceneRef.current
+      const { camera, composer, particles, originalPositions } = sceneRef.current
       const positions = particles.geometry.attributes.position.array as Float32Array
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
@@ -140,10 +161,15 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       particles.geometry.attributes.position.needsUpdate = true
       particles.geometry.attributes.size.needsUpdate = true
 
-      particles.rotation.y += 0.002 + bands.overall * 0.01
-      particles.rotation.x += 0.001
+      // Camera movement based on audio
+      camera.position.x = Math.sin(time * 0.1) * 5 + bands.mid * 3
+      camera.position.y = Math.cos(time * 0.15) * 3 + bands.high * 2
+      camera.lookAt(0, 0, 0)
 
-      renderer.render(scene, camera)
+      particles.rotation.y += 0.001 + bands.overall * 0.008
+      particles.rotation.x += 0.0005
+
+      composer.render()
     }
 
     animate()
@@ -155,20 +181,40 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       sceneRef.current.camera.aspect = width / height
       sceneRef.current.camera.updateProjectionMatrix()
       sceneRef.current.renderer.setSize(width, height)
+      sceneRef.current.composer.setSize(width, height)
+    }
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'h' || e.key === 'H') setShowUI(prev => !prev)
+      if (e.key === ' ' && audioRef.current) {
+        e.preventDefault()
+        if (isPlaying) audioRef.current.pause()
+        else audioRef.current.play()
+        setIsPlaying(!isPlaying)
+      }
+      // Number keys for modes
+      const num = parseInt(e.key)
+      if (num >= 1 && num <= visualizations.length) {
+        const mode = visualizations[num - 1]
+        setCurrentMode(mode)
+        updateParticleLayout(mode)
+      }
     }
 
     window.addEventListener('resize', handleResize)
+    window.addEventListener('keydown', handleKeyPress)
 
     return () => {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('keydown', handleKeyPress)
       if (sceneRef.current && containerRef.current) {
         sceneRef.current.renderer.dispose()
         containerRef.current.removeChild(sceneRef.current.renderer.domElement)
         sceneRef.current = null
       }
     }
-  }, [initScene, isListening, isPlaying, currentMode])
+  }, [initScene, isListening, isPlaying, currentMode, updateParticleLayout])
 
   // Auto-start based on audio source
   useEffect(() => {
@@ -196,7 +242,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       setError(null)
     } catch (err) {
       console.error('Microphone error:', err)
-      setError('Microphone access denied. Please allow microphone access.')
+      setError('Microphone access denied')
     }
   }
 
@@ -218,7 +264,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       audio.onended = () => setIsPlaying(false)
     } catch (err) {
       console.error('Audio file error:', err)
-      setError('Failed to load audio file.')
+      setError('Failed to load audio file')
     }
   }
 
@@ -245,25 +291,101 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
   }
 
   return (
-    <div className="w-full h-screen bg-[#050508] flex flex-col relative">
-      <Controls
-        isListening={isListening}
-        isPlaying={isPlaying}
-        audioSource={audioSource}
-        fileName={fileName}
-        currentMode={currentMode}
-        modes={visualizations}
-        error={error}
-        onTogglePlayback={togglePlayback}
-        onModeChange={handleModeChange}
-        onBack={onBack}
-      />
+    <div className="w-full h-screen bg-[#06060a] relative overflow-hidden">
+      {/* Three.js canvas container */}
+      <div ref={containerRef} className="absolute inset-0" />
 
-      <div className="absolute bottom-4 left-4 z-10 text-white/30 text-xs tracking-widest">
-        {isListening ? 'LISTENING' : isPlaying ? 'PLAYING' : 'PAUSED'}
+      {/* UI Overlay */}
+      <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${showUI ? 'opacity-100' : 'opacity-0'}`}>
+        
+        {/* Top bar */}
+        <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between pointer-events-auto">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 
+                       border border-white/10 text-white/60 hover:text-white text-sm transition-all"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Exit
+          </button>
+
+          <div className="flex items-center gap-3">
+            {/* Audio info */}
+            {audioSource === 'file' && fileName && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
+                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-green-500 animate-pulse' : 'bg-white/30'}`} />
+                <span className="text-white/60 text-sm truncate max-w-[200px]">{fileName}</span>
+              </div>
+            )}
+            
+            {audioSource === 'mic' && (
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
+                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-white/30'}`} />
+                <span className="text-white/60 text-sm">Microphone</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mode selector - bottom left */}
+        <div className="absolute bottom-4 left-4 pointer-events-auto">
+          <div className="flex flex-col gap-1">
+            {visualizations.map((mode, i) => (
+              <button
+                key={mode.id}
+                onClick={() => handleModeChange(mode)}
+                className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-all ${
+                  currentMode.id === mode.id
+                    ? 'bg-gradient-to-r from-violet-600/40 to-fuchsia-600/40 text-white border border-violet-500/30'
+                    : 'text-white/40 hover:text-white/80 hover:bg-white/5'
+                }`}
+              >
+                <span className="text-white/30 text-xs font-mono">{i + 1}</span>
+                {mode.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Playback controls - bottom center (file mode only) */}
+        {audioSource === 'file' && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
+            <button
+              onClick={togglePlayback}
+              className="w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 
+                         flex items-center justify-center hover:scale-105 transition-transform
+                         shadow-lg shadow-violet-500/30"
+            >
+              {isPlaying ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Keyboard hints - bottom right */}
+        <div className="absolute bottom-4 right-4 text-white/20 text-xs space-y-1 text-right pointer-events-auto">
+          <p><span className="text-white/40">H</span> toggle UI</p>
+          <p><span className="text-white/40">1-4</span> switch modes</p>
+          {audioSource === 'file' && <p><span className="text-white/40">Space</span> play/pause</p>}
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
       </div>
-
-      <div ref={containerRef} className="flex-1" />
     </div>
   )
 }

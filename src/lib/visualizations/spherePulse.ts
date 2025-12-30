@@ -18,9 +18,9 @@ export const spherePulse: VisualizationMode = {
 
       // Purple to pink gradient
       const t = Math.random()
-      colors[i * 3] = 0.4 + t * 0.5     // R
-      colors[i * 3 + 1] = 0.2 + t * 0.2  // G
-      colors[i * 3 + 2] = 0.8 + t * 0.2  // B
+      colors[i * 3] = 0.4 + t * 0.5
+      colors[i * 3 + 1] = 0.2 + t * 0.2
+      colors[i * 3 + 2] = 0.8 + t * 0.2
     }
   },
 
@@ -28,14 +28,18 @@ export const spherePulse: VisualizationMode = {
     positions: Float32Array,
     originalPositions: Float32Array,
     sizes: Float32Array,
-    _colors: Float32Array,
+    colors: Float32Array,
     count: number,
     bands: AudioBands,
     time: number
   ) {
-    const bassBoost = 1 + bands.bass * 2.5
-    const midBoost = 1 + bands.mid * 1.8
-    const highBoost = 1 + bands.high * 1.2
+    // Use smoothed values for fluid motion
+    const bassBoost = 1 + bands.bassSmooth * 1.8
+    const midBoost = 1 + bands.midSmooth * 1.2
+    const highBoost = 1 + bands.highSmooth * 0.8
+    
+    // Beat creates a pulse effect
+    const beatPulse = 1 + bands.beatIntensity * 0.4
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
@@ -45,13 +49,23 @@ export const spherePulse: VisualizationMode = {
       const dist = Math.sqrt(ox * ox + oy * oy + oz * oz)
       const freqBand = i % 3
       const boost = freqBand === 0 ? bassBoost : freqBand === 1 ? midBoost : highBoost
-      const wave = Math.sin(dist * 0.2 - time * 1.5) * 0.5 + 0.5
-      const scale = boost * (0.85 + wave * 0.3)
+      
+      // Smoother wave motion
+      const wave = Math.sin(dist * 0.15 - time * 1.2) * 0.5 + 0.5
+      const scale = boost * beatPulse * (0.9 + wave * 0.2)
 
       positions[i * 3] = ox * scale
       positions[i * 3 + 1] = oy * scale
       positions[i * 3 + 2] = oz * scale
-      sizes[i] = (1.2 + bands.overall * 3) * (1 + wave * 0.4)
+      
+      // Size reacts to overall energy smoothly
+      sizes[i] = (1.2 + bands.overallSmooth * 2.5) * (1 + wave * 0.3)
+      
+      // Subtle color shift on beats
+      const beatColor = bands.beatIntensity * 0.3
+      colors[i * 3] = 0.4 + beatColor + wave * 0.3
+      colors[i * 3 + 1] = 0.2 + bands.midSmooth * 0.3
+      colors[i * 3 + 2] = 0.8 - beatColor * 0.2
     }
   }
 }

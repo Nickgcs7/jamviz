@@ -33,28 +33,35 @@ export const explosion: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
-    const baseRadius = 8
-    const bassExpand = bands.bass * 35
-    const pulse = Math.sin(time * 3) * 3
+    // Use smoothed bass for the main expansion
+    const baseRadius = 10
+    const bassExpand = bands.bassSmooth * 25
+    const breathe = Math.sin(time * 2) * 2
+    
+    // Beat creates explosive burst
+    const beatBurst = bands.beatIntensity * 15
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
       const oy = originalPositions[i * 3 + 1]
       const oz = originalPositions[i * 3 + 2]
 
-      const individualOffset = Math.sin(time * 2 + i * 0.002) * 2
-      const radius = baseRadius + bassExpand + pulse + individualOffset
+      // Individual particle variation (smoother)
+      const individualPhase = Math.sin(time * 1.5 + i * 0.001) * 1.5
+      const radius = baseRadius + bassExpand + breathe + individualPhase + beatBurst
 
       positions[i * 3] = ox * radius
       positions[i * 3 + 1] = oy * radius
       positions[i * 3 + 2] = oz * radius
       
-      // Intensify color with bass
-      colors[i * 3] = 1.0
-      colors[i * 3 + 1] = 0.3 + bands.bass * 0.4
-      colors[i * 3 + 2] = 0.1 + bands.high * 0.3
+      // Size pulses with beat
+      sizes[i] = 1.2 + bands.overallSmooth * 4 + bands.beatIntensity * 3
       
-      sizes[i] = 1.2 + bands.overall * 5
+      // Color intensifies with energy
+      const energyBoost = bands.bassSmooth + bands.beatIntensity
+      colors[i * 3] = Math.min(1, 0.9 + energyBoost * 0.1)
+      colors[i * 3 + 1] = 0.3 + bands.midSmooth * 0.4 + bands.beatIntensity * 0.3
+      colors[i * 3 + 2] = 0.1 + bands.highSmooth * 0.4
     }
   }
 }

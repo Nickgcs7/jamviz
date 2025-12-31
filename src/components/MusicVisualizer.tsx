@@ -9,11 +9,11 @@ import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { AudioAnalyzer, type AudioBands } from '@/lib/AudioAnalyzer'
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
-import { visualizations, type VisualizationMode, type MouseCoords } from '@/lib/visualizations'
+import { visualizations, type VisualizationMode } from '@/lib/visualizations'
 
 const PARTICLE_COUNT = 10000
-const POSITION_LERP_FACTOR = 0.45   // Much faster - snappy response
-const SIZE_LERP_FACTOR = 0.55       // Much faster
+const POSITION_LERP_FACTOR = 0.45
+const SIZE_LERP_FACTOR = 0.55
 const CAMERA_LERP_FACTOR = 0.08
 const ROTATION_LERP_FACTOR = 0.15
 
@@ -35,31 +35,22 @@ interface SceneRefs {
 }
 
 interface MusicVisualizerProps {
-  audioSource: 'mic' | 'file'
-  audioFile: File | null
   onBack: () => void
 }
 
-// Linear interpolation helper
 function lerp(current: number, target: number, factor: number): number {
   return current + (target - current) * factor
 }
 
-export default function MusicVisualizer({ audioSource, audioFile, onBack }: MusicVisualizerProps) {
+export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isListening, setIsListening] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
   const [currentMode, setCurrentMode] = useState<VisualizationMode>(visualizations[0])
   const [showUI, setShowUI] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [fileName, setFileName] = useState<string | null>(null)
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
   const sceneRef = useRef<SceneRefs | null>(null)
   const animationRef = useRef<number>(0)
-  
-  // Mouse tracking state
-  const mouseRef = useRef<MouseCoords>({ x: 0, y: 0, active: false })
 
   const initScene = useCallback(() => {
     if (!containerRef.current || sceneRef.current) return
@@ -68,7 +59,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     const height = containerRef.current.clientHeight
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x010103) // Very dark
+    scene.background = new THREE.Color(0x010103)
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
     camera.position.z = 50
@@ -86,20 +77,17 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
-    // Reduced afterimage for snappier response
     const afterimagePass = new AfterimagePass(0.55)
     composer.addPass(afterimagePass)
 
-    // Bloom - responds to audio
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.5,   // base strength
-      0.3,   // radius  
-      0.5    // threshold
+      0.5,
+      0.3,
+      0.5
     )
     composer.addPass(bloomPass)
 
-    // RGB Shift
     const rgbShiftPass = new ShaderPass(RGBShiftShader)
     rgbShiftPass.uniforms['amount'].value = 0.001
     rgbShiftPass.uniforms['angle'].value = 0.0
@@ -203,11 +191,11 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
         bassSmooth: 0, midSmooth: 0, highSmooth: 0, overallSmooth: 0,
         isBeat: false, beatIntensity: 0
       }
-      if (analyzerRef.current && (isListening || isPlaying)) {
+      if (analyzerRef.current && isListening) {
         bands = analyzerRef.current.getBands()
       }
 
-      // Dynamic post-processing that REALLY responds to audio
+      // Dynamic post-processing
       rgbShiftPass.uniforms['amount'].value = 0.0006 + bands.overallSmooth * 0.003 + bands.beatIntensity * 0.006
       afterimagePass.uniforms['damp'].value = 0.5 + bands.overallSmooth * 0.25
       bloomPass.strength = 0.4 + bands.beatIntensity * 0.8 + bands.bassSmooth * 0.4
@@ -220,11 +208,10 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
         colors,
         PARTICLE_COUNT,
         bands,
-        time,
-        mouseRef.current
+        time
       )
 
-      // Fast interpolation for snappy response
+      // Interpolate positions
       for (let i = 0; i < positions.length; i++) {
         positions[i] = lerp(positions[i], targetPositions[i], POSITION_LERP_FACTOR)
       }
@@ -237,7 +224,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       particles.geometry.attributes.size.needsUpdate = true
       particles.geometry.attributes.customColor.needsUpdate = true
 
-      // Camera responds more dramatically to audio
+      // Camera movement
       const targetCameraX = Math.sin(time * 0.1) * 5 + bands.midSmooth * 8 + bands.beatIntensity * 6
       const targetCameraY = Math.cos(time * 0.12) * 3 + bands.highSmooth * 5
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
@@ -246,7 +233,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       camera.position.y = refs.currentCameraY
       camera.lookAt(0, 0, 0)
 
-      // Rotation responds to audio
+      // Rotation
       const targetRotationSpeed = 0.0004 + bands.overallSmooth * 0.01 + bands.beatIntensity * 0.008
       refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
       particles.rotation.y += refs.currentRotationSpeed
@@ -269,12 +256,6 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.key === 'h' || e.key === 'H') setShowUI(prev => !prev)
-      if (e.key === ' ' && audioRef.current) {
-        e.preventDefault()
-        if (isPlaying) audioRef.current.pause()
-        else audioRef.current.play()
-        setIsPlaying(!isPlaying)
-      }
       const num = parseInt(e.key)
       if (num >= 1 && num <= visualizations.length) {
         const mode = visualizations[num - 1]
@@ -283,46 +264,24 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       }
     }
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      mouseRef.current = {
-        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
-        active: true
-      }
-    }
-
-    const handleMouseLeave = () => {
-      mouseRef.current = { ...mouseRef.current, active: false }
-    }
-
     window.addEventListener('resize', handleResize)
     window.addEventListener('keydown', handleKeyPress)
-    containerRef.current?.addEventListener('mousemove', handleMouseMove)
-    containerRef.current?.addEventListener('mouseleave', handleMouseLeave)
 
     return () => {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('keydown', handleKeyPress)
-      containerRef.current?.removeEventListener('mousemove', handleMouseMove)
-      containerRef.current?.removeEventListener('mouseleave', handleMouseLeave)
       if (sceneRef.current && containerRef.current) {
         sceneRef.current.renderer.dispose()
         containerRef.current.removeChild(sceneRef.current.renderer.domElement)
         sceneRef.current = null
       }
     }
-  }, [initScene, isListening, isPlaying, currentMode, updateParticleLayout])
+  }, [initScene, isListening, currentMode, updateParticleLayout])
 
-  // Auto-start
+  // Auto-start microphone
   useEffect(() => {
-    if (audioSource === 'mic') {
-      startMic()
-    } else if (audioSource === 'file' && audioFile) {
-      startFile(audioFile)
-    }
+    startMic()
     return () => stopAudio()
   }, [])
 
@@ -343,53 +302,15 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     }
   }
 
-  const startFile = async (file: File) => {
-    try {
-      setFileName(file.name)
-      const url = URL.createObjectURL(file)
-      const audio = new Audio(url)
-      audio.crossOrigin = 'anonymous'
-      audioRef.current = audio
-
-      analyzerRef.current = new AudioAnalyzer()
-      await analyzerRef.current.initAudioElement(audio)
-
-      audio.play()
-      setIsPlaying(true)
-      setError(null)
-
-      audio.onended = () => setIsPlaying(false)
-    } catch (err) {
-      console.error('Audio file error:', err)
-      setError('Failed to load audio file')
-    }
-  }
-
   const stopAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current = null
-    }
     analyzerRef.current?.disconnect()
     analyzerRef.current = null
     setIsListening(false)
-    setIsPlaying(false)
-  }
-
-  const togglePlayback = () => {
-    if (!audioRef.current) return
-    if (isPlaying) {
-      audioRef.current.pause()
-      setIsPlaying(false)
-    } else {
-      audioRef.current.play()
-      setIsPlaying(true)
-    }
   }
 
   return (
     <div className="w-full h-screen bg-[#010103] relative overflow-hidden">
-      <div ref={containerRef} className="absolute inset-0 cursor-crosshair" />
+      <div ref={containerRef} className="absolute inset-0" />
 
       <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${showUI ? 'opacity-100' : 'opacity-0'}`}>
         
@@ -405,20 +326,9 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
             Exit
           </button>
 
-          <div className="flex items-center gap-3">
-            {audioSource === 'file' && fileName && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-white/30'}`} />
-                <span className="text-white/60 text-sm truncate max-w-[200px]">{fileName}</span>
-              </div>
-            )}
-            
-            {audioSource === 'mic' && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-white/30'}`} />
-                <span className="text-white/60 text-sm">Microphone</span>
-              </div>
-            )}
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
+            <div className={`w-2 h-2 rounded-full ${isListening ? 'bg-red-500 animate-pulse' : 'bg-white/30'}`} />
+            <span className="text-white/60 text-sm">Microphone</span>
           </div>
         </div>
 
@@ -441,33 +351,9 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
           </div>
         </div>
 
-        {audioSource === 'file' && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
-            <button
-              onClick={togglePlayback}
-              className="w-14 h-14 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 
-                         flex items-center justify-center hover:scale-105 transition-transform
-                         shadow-lg shadow-emerald-500/30"
-            >
-              {isPlaying ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                  <rect x="6" y="4" width="4" height="16" rx="1" />
-                  <rect x="14" y="4" width="4" height="16" rx="1" />
-                </svg>
-              ) : (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              )}
-            </button>
-          </div>
-        )}
-
         <div className="absolute bottom-4 right-4 text-white/20 text-xs space-y-1 text-right pointer-events-auto">
           <p><span className="text-white/40">H</span> toggle UI</p>
-          <p><span className="text-white/40">1-4</span> switch modes</p>
-          {audioSource === 'file' && <p><span className="text-white/40">Space</span> play/pause</p>}
-          <p><span className="text-white/40">Mouse</span> interact</p>
+          <p><span className="text-white/40">1-7</span> switch modes</p>
         </div>
 
         {error && (

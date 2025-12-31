@@ -1,14 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
-
-type AudioSource = 'mic' | 'file'
+import { useEffect, useRef, useState } from 'react'
 
 interface LandingPageProps {
-  onStart: (source: AudioSource, file?: File) => void
+  onStart: () => void
 }
 
 export default function LandingPage({ onStart }: LandingPageProps) {
-  const [source, setSource] = useState<AudioSource>('mic')
-  const [dragOver, setDragOver] = useState(false)
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 })
   const [isHovering, setIsHovering] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -67,9 +63,9 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         
         // Updated gradient: forest green -> emerald -> teal (#009aca)
         const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0)
-        gradient.addColorStop(0, `rgba(34, 139, 34, ${alpha})`)     // Forest green
-        gradient.addColorStop(0.5, `rgba(16, 185, 129, ${alpha * 1.5})`)  // Emerald
-        gradient.addColorStop(1, `rgba(0, 154, 202, ${alpha})`)     // Teal (#009aca)
+        gradient.addColorStop(0, `rgba(34, 139, 34, ${alpha})`)
+        gradient.addColorStop(0.5, `rgba(16, 185, 129, ${alpha * 1.5})`)
+        gradient.addColorStop(1, `rgba(0, 154, 202, ${alpha})`)
         
         ctx.strokeStyle = gradient
         ctx.lineWidth = 2
@@ -112,36 +108,15 @@ export default function LandingPage({ onStart }: LandingPageProps) {
     })
   }
 
-  const handleFileSelect = (file: File) => {
-    if (file.type.startsWith('audio/')) {
-      onStart('file', file)
-    }
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileSelect(file)
-  }
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleFileSelect(file)
-  }
-
   return (
     <div
       className="relative w-full h-screen bg-[#06060a] flex overflow-hidden"
       onMouseMove={handleMouseMove}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
     >
       {/* Animated canvas background */}
       <canvas ref={canvasRef} className="absolute inset-0" />
 
-      {/* Gradient orb following mouse - updated to green/teal */}
+      {/* Gradient orb following mouse */}
       <div 
         className="absolute w-[800px] h-[800px] rounded-full pointer-events-none"
         style={{
@@ -154,22 +129,12 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         }}
       />
 
-      {/* Drag overlay */}
-      {dragOver && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-emerald-500/10 backdrop-blur-sm" />
-          <div className="relative border-2 border-dashed border-emerald-500/50 rounded-2xl px-20 py-16">
-            <p className="text-white/80 text-lg tracking-wide">Drop your audio file</p>
-          </div>
-        </div>
-      )}
-
       {/* Main content */}
       <div className="relative z-10 w-full flex flex-col items-center justify-center px-6">
         
         {/* Logo section */}
         <div className="flex flex-col items-center gap-2 mb-12">
-          {/* Waveform icon - updated to green/teal gradient */}
+          {/* Waveform icon */}
           <div className="flex items-center gap-[3px] mb-4">
             {[0.4, 0.7, 1, 0.8, 0.5, 0.9, 0.6, 0.75, 0.45].map((h, i) => (
               <div
@@ -201,12 +166,12 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         {/* CTA Section */}
         <div className="flex flex-col items-center gap-6">
           <button
-            onClick={() => source === 'mic' ? onStart('mic') : document.getElementById('file-input')?.click()}
+            onClick={onStart}
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
             className="group relative px-12 py-4 rounded-full overflow-hidden transition-all duration-500"
           >
-            {/* Button gradient background - updated to green/teal */}
+            {/* Button gradient background */}
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 opacity-90 group-hover:opacity-100 transition-opacity" />
             
             {/* Shine effect */}
@@ -214,42 +179,14 @@ export default function LandingPage({ onStart }: LandingPageProps) {
             
             {/* Button text */}
             <span className="relative text-white font-semibold tracking-wide">
-              {source === 'mic' ? 'Start with Microphone' : 'Choose Audio File'}
+              Start Visualizer
             </span>
           </button>
 
-          <input
-            id="file-input"
-            type="file"
-            accept="audio/*"
-            onChange={handleFileInput}
-            className="hidden"
-          />
-
-          {/* Source toggle - updated colors */}
-          <div className="flex items-center gap-2 p-1 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
-            <button
-              onClick={() => setSource('mic')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm transition-all duration-300 ${
-                source === 'mic'
-                  ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/80 text-white shadow-lg shadow-emerald-500/20'
-                  : 'text-white/50 hover:text-white/80'
-              }`}
-            >
-              <MicIcon />
-              Microphone
-            </button>
-            <button
-              onClick={() => setSource('file')}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm transition-all duration-300 ${
-                source === 'file'
-                  ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/80 text-white shadow-lg shadow-emerald-500/20'
-                  : 'text-white/50 hover:text-white/80'
-              }`}
-            >
-              <FileIcon />
-              Audio File
-            </button>
+          {/* Microphone indicator */}
+          <div className="flex items-center gap-2 text-white/40 text-sm">
+            <MicIcon />
+            <span>Uses your microphone</span>
           </div>
         </div>
       </div>
@@ -279,16 +216,6 @@ function MicIcon() {
       <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
       <line x1="12" y1="19" x2="12" y2="23" />
       <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  )
-}
-
-function FileIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 18V5l12-2v13" />
-      <circle cx="6" cy="18" r="3" />
-      <circle cx="18" cy="16" r="3" />
     </svg>
   )
 }

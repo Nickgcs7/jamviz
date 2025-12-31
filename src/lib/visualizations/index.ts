@@ -1,15 +1,15 @@
-import { spherePulse } from './spherePulse'
-import { galaxySpiral } from './galaxySpiral'
+import { lavaLamp } from './lavaLamp'
+import { yuleLog } from './yuleLog'
 import { waveField } from './waveField'
 import { explosion } from './explosion'
-import type { VisualizationMode } from './types'
+import type { VisualizationMode, MouseCoords } from './types'
 
 export const visualizations: VisualizationMode[] = [
-  spherePulse,
-  galaxySpiral,
-  waveField,
-  explosion
+  waveField,    // Terrain - kept
+  explosion,    // Supernova - kept  
+  lavaLamp,     // New: Lava Lamp (replaced Nebula)
+  yuleLog       // New: Yule Log (replaced Vortex)
 ]
 
-export type { VisualizationMode }
-export { spherePulse, galaxySpiral, waveField, explosion }
+export type { VisualizationMode, MouseCoords }
+export { waveField, explosion, lavaLamp, yuleLog }

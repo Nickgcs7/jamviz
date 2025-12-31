@@ -12,10 +12,10 @@ import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode, type MouseCoords } from '@/lib/visualizations'
 
 const PARTICLE_COUNT = 10000
-const POSITION_LERP_FACTOR = 0.25  // Faster position response
-const SIZE_LERP_FACTOR = 0.3       // Faster size response
-const CAMERA_LERP_FACTOR = 0.06
-const ROTATION_LERP_FACTOR = 0.1
+const POSITION_LERP_FACTOR = 0.45   // Much faster - snappy response
+const SIZE_LERP_FACTOR = 0.55       // Much faster
+const CAMERA_LERP_FACTOR = 0.08
+const ROTATION_LERP_FACTOR = 0.15
 
 interface SceneRefs {
   scene: THREE.Scene
@@ -31,6 +31,7 @@ interface SceneRefs {
   currentRotationSpeed: number
   afterimagePass: AfterimagePass
   rgbShiftPass: ShaderPass
+  bloomPass: UnrealBloomPass
 }
 
 interface MusicVisualizerProps {
@@ -67,7 +68,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     const height = containerRef.current.clientHeight
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x020204) // Darker background
+    scene.background = new THREE.Color(0x010103) // Very dark
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
     camera.position.z = 50
@@ -76,36 +77,34 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 0.9 // Reduced from 1.5 for darker look
+    renderer.toneMappingExposure = 0.75
     containerRef.current.appendChild(renderer.domElement)
 
-    // Post-processing with toned down effects
+    // Post-processing
     const composer = new EffectComposer(renderer)
     
-    // 1. Render pass (base scene)
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
-    // 2. Afterimage pass (subtle motion trails)
-    const afterimagePass = new AfterimagePass(0.7) // Reduced from 0.85
+    // Reduced afterimage for snappier response
+    const afterimagePass = new AfterimagePass(0.55)
     composer.addPass(afterimagePass)
 
-    // 3. Bloom pass (more selective)
+    // Bloom - responds to audio
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.5,   // strength (reduced from 0.7)
-      0.4,   // radius
-      0.4    // threshold (increased from 0.15 - only bright things bloom)
+      0.5,   // base strength
+      0.3,   // radius  
+      0.5    // threshold
     )
     composer.addPass(bloomPass)
 
-    // 4. RGB Shift pass (chromatic aberration)
+    // RGB Shift
     const rgbShiftPass = new ShaderPass(RGBShiftShader)
     rgbShiftPass.uniforms['amount'].value = 0.001
     rgbShiftPass.uniforms['angle'].value = 0.0
     composer.addPass(rgbShiftPass)
 
-    // 5. Output pass (final)
     const outputPass = new OutputPass()
     composer.addPass(outputPass)
 
@@ -120,7 +119,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       sizes[i] = 1 + Math.random() * 2
-      alphas[i] = 0.3 + Math.random() * 0.5 // Slightly lower alpha
+      alphas[i] = 0.5 + Math.random() * 0.4
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -152,7 +151,8 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       currentCameraY: 0,
       currentRotationSpeed: 0.001,
       afterimagePass,
-      rgbShiftPass
+      rgbShiftPass,
+      bloomPass
     }
   }, [currentMode])
 
@@ -192,12 +192,12 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       if (!sceneRef.current) return
 
       const refs = sceneRef.current
-      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, rgbShiftPass, afterimagePass } = refs
+      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, rgbShiftPass, afterimagePass, bloomPass } = refs
       const positions = particles.geometry.attributes.position.array as Float32Array
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
 
-      // Get audio data with defaults
+      // Get audio data
       let bands: AudioBands = { 
         bass: 0, mid: 0, high: 0, overall: 0,
         bassSmooth: 0, midSmooth: 0, highSmooth: 0, overallSmooth: 0,
@@ -207,13 +207,12 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
         bands = analyzerRef.current.getBands()
       }
 
-      // Dynamic RGB shift based on audio (more subtle)
-      rgbShiftPass.uniforms['amount'].value = 0.0008 + bands.overallSmooth * 0.0015 + bands.beatIntensity * 0.002
-      
-      // Dynamic afterimage based on audio (more trails on beats)
-      afterimagePass.uniforms['damp'].value = 0.65 + bands.overallSmooth * 0.15
+      // Dynamic post-processing that REALLY responds to audio
+      rgbShiftPass.uniforms['amount'].value = 0.0006 + bands.overallSmooth * 0.003 + bands.beatIntensity * 0.006
+      afterimagePass.uniforms['damp'].value = 0.5 + bands.overallSmooth * 0.25
+      bloomPass.strength = 0.4 + bands.beatIntensity * 0.8 + bands.bassSmooth * 0.4
 
-      // Run visualization to compute TARGET positions with mouse interaction
+      // Run visualization
       currentMode.animate(
         targetPositions,
         originalPositions,
@@ -225,12 +224,11 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
         mouseRef.current
       )
 
-      // Interpolate current positions toward targets (smooth motion)
+      // Fast interpolation for snappy response
       for (let i = 0; i < positions.length; i++) {
         positions[i] = lerp(positions[i], targetPositions[i], POSITION_LERP_FACTOR)
       }
       
-      // Interpolate sizes
       for (let i = 0; i < sizes.length; i++) {
         sizes[i] = lerp(sizes[i], targetSizes[i], SIZE_LERP_FACTOR)
       }
@@ -239,20 +237,20 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       particles.geometry.attributes.size.needsUpdate = true
       particles.geometry.attributes.customColor.needsUpdate = true
 
-      // Smooth camera movement
-      const targetCameraX = Math.sin(time * 0.08) * 4 + bands.midSmooth * 3
-      const targetCameraY = Math.cos(time * 0.1) * 2.5 + bands.highSmooth * 2
+      // Camera responds more dramatically to audio
+      const targetCameraX = Math.sin(time * 0.1) * 5 + bands.midSmooth * 8 + bands.beatIntensity * 6
+      const targetCameraY = Math.cos(time * 0.12) * 3 + bands.highSmooth * 5
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
       camera.position.x = refs.currentCameraX
       camera.position.y = refs.currentCameraY
       camera.lookAt(0, 0, 0)
 
-      // Smooth rotation (more responsive to audio)
-      const targetRotationSpeed = 0.0006 + bands.overallSmooth * 0.006 + bands.beatIntensity * 0.003
+      // Rotation responds to audio
+      const targetRotationSpeed = 0.0004 + bands.overallSmooth * 0.01 + bands.beatIntensity * 0.008
       refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
       particles.rotation.y += refs.currentRotationSpeed
-      particles.rotation.x += refs.currentRotationSpeed * 0.3
+      particles.rotation.x += refs.currentRotationSpeed * 0.15
 
       composer.render()
     }
@@ -285,7 +283,6 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       }
     }
 
-    // Mouse tracking handlers
     const handleMouseMove = (e: MouseEvent) => {
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
@@ -319,17 +316,14 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     }
   }, [initScene, isListening, isPlaying, currentMode, updateParticleLayout])
 
-  // Auto-start based on audio source
+  // Auto-start
   useEffect(() => {
     if (audioSource === 'mic') {
       startMic()
     } else if (audioSource === 'file' && audioFile) {
       startFile(audioFile)
     }
-
-    return () => {
-      stopAudio()
-    }
+    return () => stopAudio()
   }, [])
 
   const handleModeChange = useCallback((mode: VisualizationMode) => {
@@ -394,7 +388,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
   }
 
   return (
-    <div className="w-full h-screen bg-[#020204] relative overflow-hidden">
+    <div className="w-full h-screen bg-[#010103] relative overflow-hidden">
       <div ref={containerRef} className="absolute inset-0 cursor-crosshair" />
 
       <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${showUI ? 'opacity-100' : 'opacity-0'}`}>

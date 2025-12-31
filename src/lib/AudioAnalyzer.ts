@@ -18,7 +18,7 @@ export class AudioAnalyzer {
   source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null
   private stream: MediaStream | null = null
 
-  // Smoothed values (for gradual transitions)
+  // Smoothed values
   private smoothBass = 0
   private smoothMid = 0
   private smoothHigh = 0
@@ -26,21 +26,21 @@ export class AudioAnalyzer {
 
   // Beat detection
   private lastBeatTime = 0
-  private beatCooldown = 150 // ms between beats (reduced for faster detection)
+  private beatCooldown = 100 // ms - very fast beat detection
   private energyHistory: number[] = []
-  private historySize = 30 // ~0.5 seconds at 60fps (reduced for faster response)
+  private historySize = 15 // Very short history for immediate response
   private currentBeatIntensity = 0
 
-  // Smoothing factors (0-1, higher = faster response)
-  private smoothingFactorUp = 0.35    // Much faster attack
-  private smoothingFactorDown = 0.15  // Faster release
+  // Smoothing factors - INSTANT response
+  private smoothingFactorUp = 0.6     // Nearly instant attack
+  private smoothingFactorDown = 0.25  // Fast release
 
   async initMic(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     this.audioContext = new AudioContext()
     this.analyser = this.audioContext.createAnalyser()
     this.analyser.fftSize = 512
-    this.analyser.smoothingTimeConstant = 0.6 // Much lower for faster response
+    this.analyser.smoothingTimeConstant = 0.3 // Very fast FFT response
     this.source = this.audioContext.createMediaStreamSource(this.stream)
     this.source.connect(this.analyser)
     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount)
@@ -50,7 +50,7 @@ export class AudioAnalyzer {
     this.audioContext = new AudioContext()
     this.analyser = this.audioContext.createAnalyser()
     this.analyser.fftSize = 512
-    this.analyser.smoothingTimeConstant = 0.6 // Much lower for faster response
+    this.analyser.smoothingTimeConstant = 0.3 // Very fast FFT response
     this.source = this.audioContext.createMediaElementSource(audioElement)
     this.source.connect(this.analyser)
     this.analyser.connect(this.audioContext.destination)
@@ -81,13 +81,13 @@ export class AudioAnalyzer {
   getBands(): AudioBands {
     this.getFrequencyData()
 
-    // Raw frequency bands (adjusted ranges for better musicality)
-    const rawBass = this.getAverageFrequency(0, 8)       // Sub-bass and bass (slightly wider)
-    const rawMid = this.getAverageFrequency(8, 40)       // Mids
-    const rawHigh = this.getAverageFrequency(40, 120)    // Highs
-    const rawOverall = this.getAverageFrequency(0, 120)
+    // Raw frequency bands
+    const rawBass = this.getAverageFrequency(0, 10)      // Bass
+    const rawMid = this.getAverageFrequency(10, 50)      // Mids  
+    const rawHigh = this.getAverageFrequency(50, 140)    // Highs
+    const rawOverall = this.getAverageFrequency(0, 140)
 
-    // Apply asymmetric smoothing (faster attack, moderate release)
+    // Apply asymmetric smoothing - very fast attack
     const bassUp = rawBass > this.smoothBass
     const midUp = rawMid > this.smoothMid
     const highUp = rawHigh > this.smoothHigh
@@ -96,7 +96,7 @@ export class AudioAnalyzer {
     this.smoothBass = this.lerp(
       this.smoothBass, 
       rawBass, 
-      bassUp ? this.smoothingFactorUp * 1.3 : this.smoothingFactorDown
+      bassUp ? this.smoothingFactorUp * 1.2 : this.smoothingFactorDown
     )
     this.smoothMid = this.lerp(
       this.smoothMid, 
@@ -106,7 +106,7 @@ export class AudioAnalyzer {
     this.smoothHigh = this.lerp(
       this.smoothHigh, 
       rawHigh, 
-      highUp ? this.smoothingFactorUp * 0.9 : this.smoothingFactorDown * 0.8
+      highUp ? this.smoothingFactorUp * 0.8 : this.smoothingFactorDown * 0.7
     )
     this.smoothOverall = this.lerp(
       this.smoothOverall, 
@@ -114,8 +114,8 @@ export class AudioAnalyzer {
       overallUp ? this.smoothingFactorUp : this.smoothingFactorDown
     )
 
-    // Beat detection using energy comparison
-    const currentEnergy = rawBass * 2.0 + rawMid * 0.5
+    // Beat detection - very sensitive
+    const currentEnergy = rawBass * 2.5 + rawMid * 0.7
     this.energyHistory.push(currentEnergy)
     if (this.energyHistory.length > this.historySize) {
       this.energyHistory.shift()
@@ -123,23 +123,23 @@ export class AudioAnalyzer {
 
     const averageEnergy = this.energyHistory.reduce((a, b) => a + b, 0) / this.energyHistory.length
     const energyVariance = this.energyHistory.reduce((sum, e) => sum + Math.pow(e - averageEnergy, 2), 0) / this.energyHistory.length
-    const dynamicThreshold = averageEnergy + Math.sqrt(energyVariance) * 1.3 // Lower threshold for more beats
+    const dynamicThreshold = averageEnergy + Math.sqrt(energyVariance) * 1.0 // Very sensitive
 
     const now = performance.now()
     let isBeat = false
 
     if (
       currentEnergy > dynamicThreshold &&
-      currentEnergy > 0.2 && // Lower minimum
+      currentEnergy > 0.12 && // Low minimum for sensitivity
       now - this.lastBeatTime > this.beatCooldown
     ) {
       isBeat = true
       this.lastBeatTime = now
-      this.currentBeatIntensity = Math.min(1, (currentEnergy - averageEnergy) / 0.3)
+      this.currentBeatIntensity = Math.min(1, (currentEnergy - averageEnergy) / 0.2)
     }
 
-    // Decay beat intensity (faster decay for snappier response)
-    this.currentBeatIntensity *= 0.75
+    // Fast beat decay for punchy feel
+    this.currentBeatIntensity *= 0.65
 
     return {
       bass: rawBass,

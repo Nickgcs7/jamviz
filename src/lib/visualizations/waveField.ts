@@ -1,4 +1,4 @@
-import type { VisualizationMode } from './types'
+import type { VisualizationMode, MouseCoords } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 
 export const waveField: VisualizationMode = {
@@ -31,13 +31,19 @@ export const waveField: VisualizationMode = {
     colors: Float32Array,
     count: number,
     bands: AudioBands,
-    time: number
+    time: number,
+    mouse?: MouseCoords
   ) {
-    // Reduced multipliers for gentler waves
     const bassHeight = bands.bassSmooth * 5
     const midHeight = bands.midSmooth * 3
     const highRipple = bands.highSmooth * 1.5
     const beatWave = bands.beatIntensity * 4
+
+    // Mouse interaction parameters
+    const mouseX = mouse?.active ? mouse.x * 35 : 0
+    const mouseZ = mouse?.active ? -mouse.y * 35 : 0
+    const mouseInfluenceRadius = 15
+    const mouseStrength = mouse?.active ? 8 : 0
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
@@ -45,20 +51,31 @@ export const waveField: VisualizationMode = {
       
       const distFromCenter = Math.sqrt(ox * ox + oz * oz)
 
-      // Gentler layered waves
+      // Layered waves
       const waveX = Math.sin(ox * 0.08 + time * 1.0) * bassHeight
       const waveZ = Math.cos(oz * 0.08 + time * 0.8) * midHeight
       const ripple = Math.sin(distFromCenter * 0.12 - time * 1.2) * highRipple
       const beatRing = Math.sin(distFromCenter * 0.1 - time * 2) * beatWave
 
+      // Mouse ripple effect
+      let mouseRipple = 0
+      if (mouse?.active) {
+        const distToMouse = Math.sqrt(Math.pow(ox - mouseX, 2) + Math.pow(oz - mouseZ, 2))
+        if (distToMouse < mouseInfluenceRadius) {
+          const influence = 1 - distToMouse / mouseInfluenceRadius
+          mouseRipple = Math.sin(distToMouse * 0.3 - time * 3) * mouseStrength * influence * influence
+        }
+      }
+
       positions[i * 3] = ox
-      positions[i * 3 + 1] = waveX + waveZ + ripple + beatRing
+      positions[i * 3 + 1] = waveX + waveZ + ripple + beatRing + mouseRipple
       positions[i * 3 + 2] = oz
       
       // Smooth color transitions
       const height = positions[i * 3 + 1] / 10
       const beatGlow = bands.beatIntensity * 0.25
-      colors[i * 3] = 0.2 + Math.abs(height) * 0.35 + beatGlow
+      const mouseGlow = mouseRipple > 0 ? Math.abs(mouseRipple) * 0.03 : 0
+      colors[i * 3] = 0.2 + Math.abs(height) * 0.35 + beatGlow + mouseGlow
       colors[i * 3 + 1] = 0.5 + height * 0.15
       colors[i * 3 + 2] = 0.9 - Math.abs(height) * 0.2
       

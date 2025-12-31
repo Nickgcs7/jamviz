@@ -31,16 +31,16 @@ export class AudioAnalyzer {
   private historySize = 43 // ~0.7 seconds at 60fps
   private currentBeatIntensity = 0
 
-  // Smoothing factors (0-1, lower = smoother)
-  private smoothingFactorUp = 0.08    // Slower attack
-  private smoothingFactorDown = 0.04  // Even slower release
+  // Smoothing factors (0-1, lower = smoother) - increased for faster response
+  private smoothingFactorUp = 0.12    // Faster attack (was 0.08)
+  private smoothingFactorDown = 0.06  // Faster release (was 0.04)
 
   async initMic(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     this.audioContext = new AudioContext()
     this.analyser = this.audioContext.createAnalyser()
     this.analyser.fftSize = 512
-    this.analyser.smoothingTimeConstant = 0.92 // Higher = smoother FFT
+    this.analyser.smoothingTimeConstant = 0.85 // Reduced from 0.92 for faster response
     this.source = this.audioContext.createMediaStreamSource(this.stream)
     this.source.connect(this.analyser)
     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount)
@@ -50,7 +50,7 @@ export class AudioAnalyzer {
     this.audioContext = new AudioContext()
     this.analyser = this.audioContext.createAnalyser()
     this.analyser.fftSize = 512
-    this.analyser.smoothingTimeConstant = 0.92 // Higher = smoother FFT
+    this.analyser.smoothingTimeConstant = 0.85 // Reduced from 0.92 for faster response
     this.source = this.audioContext.createMediaElementSource(audioElement)
     this.source.connect(this.analyser)
     this.analyser.connect(this.audioContext.destination)
@@ -87,7 +87,7 @@ export class AudioAnalyzer {
     const rawHigh = this.getAverageFrequency(32, 100)    // Highs
     const rawOverall = this.getAverageFrequency(0, 100)
 
-    // Apply asymmetric smoothing (moderate attack, slow release)
+    // Apply asymmetric smoothing (faster attack, moderate release)
     const bassUp = rawBass > this.smoothBass
     const midUp = rawMid > this.smoothMid
     const highUp = rawHigh > this.smoothHigh
@@ -138,8 +138,8 @@ export class AudioAnalyzer {
       this.currentBeatIntensity = Math.min(1, (currentEnergy - averageEnergy) / 0.4)
     }
 
-    // Decay beat intensity smoothly (slower decay)
-    this.currentBeatIntensity *= 0.88
+    // Decay beat intensity smoothly (slightly faster decay)
+    this.currentBeatIntensity *= 0.85
 
     return {
       bass: rawBass,

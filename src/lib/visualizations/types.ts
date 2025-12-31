@@ -1,5 +1,11 @@
 import type { AudioBands } from '../AudioAnalyzer'
 
+export interface MouseCoords {
+  x: number  // -1 to 1 (left to right)
+  y: number  // -1 to 1 (bottom to top)
+  active: boolean  // whether mouse is being tracked
+}
+
 export interface VisualizationMode {
   id: string
   name: string
@@ -12,6 +18,7 @@ export interface VisualizationMode {
     colors: Float32Array,
     count: number,
     bands: AudioBands,
-    time: number
+    time: number,
+    mouse?: MouseCoords
   ) => void
 }

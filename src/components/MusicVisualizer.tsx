@@ -3,16 +3,19 @@ import * as THREE from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js'
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
+import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { AudioAnalyzer, type AudioBands } from '@/lib/AudioAnalyzer'
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
-import { visualizations, type VisualizationMode } from '@/lib/visualizations'
+import { visualizations, type VisualizationMode, type MouseCoords } from '@/lib/visualizations'
 
 const PARTICLE_COUNT = 10000
-const POSITION_LERP_FACTOR = 0.08  // How fast positions interpolate (lower = smoother)
-const SIZE_LERP_FACTOR = 0.12      // How fast sizes interpolate
-const CAMERA_LERP_FACTOR = 0.04   // How fast camera moves
-const ROTATION_LERP_FACTOR = 0.06 // How fast rotation changes
+const POSITION_LERP_FACTOR = 0.15  // Increased from 0.08 for faster response
+const SIZE_LERP_FACTOR = 0.15      // Increased from 0.12
+const CAMERA_LERP_FACTOR = 0.05    // Slightly faster camera
+const ROTATION_LERP_FACTOR = 0.08  // Slightly faster rotation
 
 interface SceneRefs {
   scene: THREE.Scene
@@ -26,6 +29,8 @@ interface SceneRefs {
   currentCameraX: number
   currentCameraY: number
   currentRotationSpeed: number
+  afterimagePass: AfterimagePass
+  rgbShiftPass: ShaderPass
 }
 
 interface MusicVisualizerProps {
@@ -51,6 +56,9 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
   const sceneRef = useRef<SceneRefs | null>(null)
   const animationRef = useRef<number>(0)
+  
+  // Mouse tracking state
+  const mouseRef = useRef<MouseCoords>({ x: 0, y: 0, active: false })
 
   const initScene = useCallback(() => {
     if (!containerRef.current || sceneRef.current) return
@@ -71,20 +79,33 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     renderer.toneMappingExposure = 1.5
     containerRef.current.appendChild(renderer.domElement)
 
-    // Post-processing with bloom
+    // Post-processing with enhanced effects
     const composer = new EffectComposer(renderer)
     
+    // 1. Render pass (base scene)
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
+    // 2. Afterimage pass (motion trails)
+    const afterimagePass = new AfterimagePass(0.85)
+    composer.addPass(afterimagePass)
+
+    // 3. Bloom pass
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.7,  // strength (slightly reduced)
-      0.5,  // radius
-      0.15  // threshold
+      0.7,   // strength
+      0.5,   // radius
+      0.15   // threshold
     )
     composer.addPass(bloomPass)
 
+    // 4. RGB Shift pass (chromatic aberration)
+    const rgbShiftPass = new ShaderPass(RGBShiftShader)
+    rgbShiftPass.uniforms['amount'].value = 0.0015
+    rgbShiftPass.uniforms['angle'].value = 0.0
+    composer.addPass(rgbShiftPass)
+
+    // 5. Output pass (final)
     const outputPass = new OutputPass()
     composer.addPass(outputPass)
 
@@ -125,11 +146,13 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       composer,
       particles,
       originalPositions: positions.slice(),
-      targetPositions: positions.slice(),  // Target positions for lerping
-      targetSizes: sizes.slice(),           // Target sizes for lerping
+      targetPositions: positions.slice(),
+      targetSizes: sizes.slice(),
       currentCameraX: 0,
       currentCameraY: 0,
-      currentRotationSpeed: 0.001
+      currentRotationSpeed: 0.001,
+      afterimagePass,
+      rgbShiftPass
     }
   }, [currentMode])
 
@@ -169,7 +192,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       if (!sceneRef.current) return
 
       const refs = sceneRef.current
-      const { camera, composer, particles, originalPositions, targetPositions, targetSizes } = refs
+      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, rgbShiftPass } = refs
       const positions = particles.geometry.attributes.position.array as Float32Array
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
@@ -184,15 +207,19 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
         bands = analyzerRef.current.getBands()
       }
 
-      // Run visualization to compute TARGET positions (not current)
+      // Dynamic RGB shift based on audio
+      rgbShiftPass.uniforms['amount'].value = 0.001 + bands.overallSmooth * 0.002 + bands.beatIntensity * 0.003
+
+      // Run visualization to compute TARGET positions with mouse interaction
       currentMode.animate(
-        targetPositions,  // Write to targets
+        targetPositions,
         originalPositions,
         targetSizes,
         colors,
         PARTICLE_COUNT,
         bands,
-        time
+        time,
+        mouseRef.current
       )
 
       // Interpolate current positions toward targets (smooth motion)
@@ -255,13 +282,32 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       }
     }
 
+    // Mouse tracking handlers
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      mouseRef.current = {
+        x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        active: true
+      }
+    }
+
+    const handleMouseLeave = () => {
+      mouseRef.current = { ...mouseRef.current, active: false }
+    }
+
     window.addEventListener('resize', handleResize)
     window.addEventListener('keydown', handleKeyPress)
+    containerRef.current?.addEventListener('mousemove', handleMouseMove)
+    containerRef.current?.addEventListener('mouseleave', handleMouseLeave)
 
     return () => {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('keydown', handleKeyPress)
+      containerRef.current?.removeEventListener('mousemove', handleMouseMove)
+      containerRef.current?.removeEventListener('mouseleave', handleMouseLeave)
       if (sceneRef.current && containerRef.current) {
         sceneRef.current.renderer.dispose()
         containerRef.current.removeChild(sceneRef.current.renderer.domElement)
@@ -346,7 +392,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
   return (
     <div className="w-full h-screen bg-[#06060a] relative overflow-hidden">
-      <div ref={containerRef} className="absolute inset-0" />
+      <div ref={containerRef} className="absolute inset-0 cursor-crosshair" />
 
       <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${showUI ? 'opacity-100' : 'opacity-0'}`}>
         
@@ -365,7 +411,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
           <div className="flex items-center gap-3">
             {audioSource === 'file' && fileName && (
               <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-green-500 animate-pulse' : 'bg-white/30'}`} />
+                <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-white/30'}`} />
                 <span className="text-white/60 text-sm truncate max-w-[200px]">{fileName}</span>
               </div>
             )}
@@ -387,7 +433,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
                 onClick={() => handleModeChange(mode)}
                 className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-all ${
                   currentMode.id === mode.id
-                    ? 'bg-gradient-to-r from-violet-600/40 to-fuchsia-600/40 text-white border border-violet-500/30'
+                    ? 'bg-gradient-to-r from-emerald-600/40 to-teal-600/40 text-white border border-emerald-500/30'
                     : 'text-white/40 hover:text-white/80 hover:bg-white/5'
                 }`}
               >
@@ -402,9 +448,9 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
             <button
               onClick={togglePlayback}
-              className="w-14 h-14 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 
+              className="w-14 h-14 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 
                          flex items-center justify-center hover:scale-105 transition-transform
-                         shadow-lg shadow-violet-500/30"
+                         shadow-lg shadow-emerald-500/30"
             >
               {isPlaying ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
@@ -424,6 +470,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
           <p><span className="text-white/40">H</span> toggle UI</p>
           <p><span className="text-white/40">1-4</span> switch modes</p>
           {audioSource === 'file' && <p><span className="text-white/40">Space</span> play/pause</p>}
+          <p><span className="text-white/40">Mouse</span> interact</p>
         </div>
 
         {error && (

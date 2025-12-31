@@ -1,4 +1,4 @@
-import type { VisualizationMode } from './types'
+import type { VisualizationMode, MouseCoords } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 
 export const explosion: VisualizationMode = {
@@ -29,26 +29,50 @@ export const explosion: VisualizationMode = {
     colors: Float32Array,
     count: number,
     bands: AudioBands,
-    time: number
+    time: number,
+    mouse?: MouseCoords
   ) {
-    // Reduced multipliers for controlled expansion
     const baseRadius = 12
     const bassExpand = bands.bassSmooth * 12
     const breathe = Math.sin(time * 1.5) * 1.5
     const beatBurst = bands.beatIntensity * 8
+
+    // Mouse attraction/repulsion parameters
+    const mouseX = mouse?.active ? mouse.x * 30 : 0
+    const mouseY = mouse?.active ? mouse.y * 30 : 0
+    const mouseInfluenceRadius = 25
+    const attractionStrength = mouse?.active ? 0.3 : 0
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
       const oy = originalPositions[i * 3 + 1]
       const oz = originalPositions[i * 3 + 2]
 
-      // Gentler individual variation
+      // Individual variation
       const individualPhase = Math.sin(time * 1.0 + i * 0.0008) * 1
       const radius = baseRadius + bassExpand + breathe + individualPhase + beatBurst
 
-      positions[i * 3] = ox * radius
-      positions[i * 3 + 1] = oy * radius
-      positions[i * 3 + 2] = oz * radius
+      let px = ox * radius
+      let py = oy * radius
+      let pz = oz * radius
+
+      // Mouse attraction effect
+      if (mouse?.active) {
+        const dx = mouseX - px
+        const dy = mouseY - py
+        const dist = Math.sqrt(dx * dx + dy * dy + pz * pz)
+        
+        if (dist < mouseInfluenceRadius && dist > 0.1) {
+          const influence = 1 - dist / mouseInfluenceRadius
+          const force = influence * influence * attractionStrength * radius
+          px += (dx / dist) * force
+          py += (dy / dist) * force
+        }
+      }
+
+      positions[i * 3] = px
+      positions[i * 3 + 1] = py
+      positions[i * 3 + 2] = pz
       
       sizes[i] = 1.5 + bands.overallSmooth * 2.5 + bands.beatIntensity * 2
       

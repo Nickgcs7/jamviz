@@ -12,10 +12,10 @@ import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode, type MouseCoords } from '@/lib/visualizations'
 
 const PARTICLE_COUNT = 10000
-const POSITION_LERP_FACTOR = 0.15  // Increased from 0.08 for faster response
-const SIZE_LERP_FACTOR = 0.15      // Increased from 0.12
-const CAMERA_LERP_FACTOR = 0.05    // Slightly faster camera
-const ROTATION_LERP_FACTOR = 0.08  // Slightly faster rotation
+const POSITION_LERP_FACTOR = 0.25  // Faster position response
+const SIZE_LERP_FACTOR = 0.3       // Faster size response
+const CAMERA_LERP_FACTOR = 0.06
+const ROTATION_LERP_FACTOR = 0.1
 
 interface SceneRefs {
   scene: THREE.Scene
@@ -67,7 +67,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     const height = containerRef.current.clientHeight
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x06060a)
+    scene.background = new THREE.Color(0x020204) // Darker background
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
     camera.position.z = 50
@@ -76,32 +76,32 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.5
+    renderer.toneMappingExposure = 0.9 // Reduced from 1.5 for darker look
     containerRef.current.appendChild(renderer.domElement)
 
-    // Post-processing with enhanced effects
+    // Post-processing with toned down effects
     const composer = new EffectComposer(renderer)
     
     // 1. Render pass (base scene)
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
-    // 2. Afterimage pass (motion trails)
-    const afterimagePass = new AfterimagePass(0.85)
+    // 2. Afterimage pass (subtle motion trails)
+    const afterimagePass = new AfterimagePass(0.7) // Reduced from 0.85
     composer.addPass(afterimagePass)
 
-    // 3. Bloom pass
+    // 3. Bloom pass (more selective)
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.7,   // strength
-      0.5,   // radius
-      0.15   // threshold
+      0.5,   // strength (reduced from 0.7)
+      0.4,   // radius
+      0.4    // threshold (increased from 0.15 - only bright things bloom)
     )
     composer.addPass(bloomPass)
 
     // 4. RGB Shift pass (chromatic aberration)
     const rgbShiftPass = new ShaderPass(RGBShiftShader)
-    rgbShiftPass.uniforms['amount'].value = 0.0015
+    rgbShiftPass.uniforms['amount'].value = 0.001
     rgbShiftPass.uniforms['angle'].value = 0.0
     composer.addPass(rgbShiftPass)
 
@@ -120,7 +120,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       sizes[i] = 1 + Math.random() * 2
-      alphas[i] = 0.4 + Math.random() * 0.6
+      alphas[i] = 0.3 + Math.random() * 0.5 // Slightly lower alpha
     }
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -192,7 +192,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       if (!sceneRef.current) return
 
       const refs = sceneRef.current
-      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, rgbShiftPass } = refs
+      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, rgbShiftPass, afterimagePass } = refs
       const positions = particles.geometry.attributes.position.array as Float32Array
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
@@ -207,8 +207,11 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
         bands = analyzerRef.current.getBands()
       }
 
-      // Dynamic RGB shift based on audio
-      rgbShiftPass.uniforms['amount'].value = 0.001 + bands.overallSmooth * 0.002 + bands.beatIntensity * 0.003
+      // Dynamic RGB shift based on audio (more subtle)
+      rgbShiftPass.uniforms['amount'].value = 0.0008 + bands.overallSmooth * 0.0015 + bands.beatIntensity * 0.002
+      
+      // Dynamic afterimage based on audio (more trails on beats)
+      afterimagePass.uniforms['damp'].value = 0.65 + bands.overallSmooth * 0.15
 
       // Run visualization to compute TARGET positions with mouse interaction
       currentMode.animate(
@@ -237,16 +240,16 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
       particles.geometry.attributes.customColor.needsUpdate = true
 
       // Smooth camera movement
-      const targetCameraX = Math.sin(time * 0.08) * 4 + bands.midSmooth * 2
-      const targetCameraY = Math.cos(time * 0.1) * 2.5 + bands.highSmooth * 1.5
+      const targetCameraX = Math.sin(time * 0.08) * 4 + bands.midSmooth * 3
+      const targetCameraY = Math.cos(time * 0.1) * 2.5 + bands.highSmooth * 2
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
       camera.position.x = refs.currentCameraX
       camera.position.y = refs.currentCameraY
       camera.lookAt(0, 0, 0)
 
-      // Smooth rotation
-      const targetRotationSpeed = 0.0008 + bands.overallSmooth * 0.004
+      // Smooth rotation (more responsive to audio)
+      const targetRotationSpeed = 0.0006 + bands.overallSmooth * 0.006 + bands.beatIntensity * 0.003
       refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
       particles.rotation.y += refs.currentRotationSpeed
       particles.rotation.x += refs.currentRotationSpeed * 0.3
@@ -391,7 +394,7 @@ export default function MusicVisualizer({ audioSource, audioFile, onBack }: Musi
   }
 
   return (
-    <div className="w-full h-screen bg-[#06060a] relative overflow-hidden">
+    <div className="w-full h-screen bg-[#020204] relative overflow-hidden">
       <div ref={containerRef} className="absolute inset-0 cursor-crosshair" />
 
       <div className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${showUI ? 'opacity-100' : 'opacity-0'}`}>

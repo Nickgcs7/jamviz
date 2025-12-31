@@ -17,7 +17,6 @@ export const galaxySpiral: VisualizationMode = {
       positions[i * 3 + 1] = (Math.random() - 0.5) * 3
       positions[i * 3 + 2] = (t + spread) * Math.sin(t * 0.8 + armOffset)
 
-      // Warm gradient: orange to pink
       const gradient = t / 12
       colors[i * 3] = 0.9 + gradient * 0.1
       colors[i * 3 + 1] = 0.3 + gradient * 0.3
@@ -34,38 +33,34 @@ export const galaxySpiral: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
-    // Use smoothed values
-    const rotationSpeed = 0.3 + bands.overallSmooth * 0.4
-    const spiralBoost = 1 + bands.bassSmooth * 0.3
-    const verticalWave = bands.midSmooth * 3
-    
-    // Beat creates expansion
-    const beatExpand = 1 + bands.beatIntensity * 0.25
+    // Reduced multipliers
+    const rotationSpeed = 0.2 + bands.overallSmooth * 0.2
+    const spiralBoost = 1 + bands.bassSmooth * 0.15
+    const verticalWave = bands.midSmooth * 1.5
+    const beatExpand = 1 + bands.beatIntensity * 0.12
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
       const oy = originalPositions[i * 3 + 1]
       const oz = originalPositions[i * 3 + 2]
 
-      const particlePhase = (i / count) * 0.3
+      const particlePhase = (i / count) * 0.2
       const angle = time * rotationSpeed + particlePhase
       
-      // Smooth spiral motion
-      const cos = Math.cos(angle * 0.08)
-      const sin = Math.sin(angle * 0.08)
-      const lift = Math.sin(time * 1.5 + i * 0.005) * verticalWave
+      const cos = Math.cos(angle * 0.05)
+      const sin = Math.sin(angle * 0.05)
+      const lift = Math.sin(time * 1.2 + i * 0.003) * verticalWave
 
       positions[i * 3] = (ox * cos - oz * sin) * spiralBoost * beatExpand
       positions[i * 3 + 1] = oy + lift
       positions[i * 3 + 2] = (ox * sin + oz * cos) * spiralBoost * beatExpand
       
-      sizes[i] = 1.2 + bands.highSmooth * 2 + bands.beatIntensity * 1.5
+      sizes[i] = 1.5 + bands.highSmooth * 1.2 + bands.beatIntensity * 0.8
       
-      // Color intensifies on beat
-      const intensity = 0.8 + bands.beatIntensity * 0.2
+      const intensity = 0.85 + bands.beatIntensity * 0.15
       colors[i * 3] = 0.9 * intensity
-      colors[i * 3 + 1] = (0.3 + bands.midSmooth * 0.4) * intensity
-      colors[i * 3 + 2] = (0.3 + bands.highSmooth * 0.5) * intensity
+      colors[i * 3 + 1] = (0.3 + bands.midSmooth * 0.3) * intensity
+      colors[i * 3 + 2] = (0.3 + bands.highSmooth * 0.4) * intensity
     }
   }
 }

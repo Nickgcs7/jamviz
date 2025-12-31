@@ -79,18 +79,20 @@ export const ledMatrix: VisualizationMode = {
       const horizontalWave = Math.sin(nx * Math.PI * 3 + time * 2) * midWave
       const radialWave = Math.sin(Math.sqrt(Math.pow(nx - 0.5, 2) + Math.pow(ny - 0.5, 2)) * 10 - time * 4) * bands.highSmooth
       
+      // Smoother diagonal sweep - reduced intensity and smoothed timing
       const diagonalSweep = bands.isBeat ? 
-        Math.max(0, 1 - Math.abs((nx + ny) - (time % 2))) : 0
+        Math.max(0, 1 - Math.abs((nx + ny) - (time % 2))) * 0.6 : 0
       
       panel.targetBrightness = 0.2 + 
         Math.max(0, verticalWave) * 0.4 + 
         Math.max(0, horizontalWave) * 0.3 + 
         Math.max(0, radialWave) * 0.3 + 
-        beatPulse * 0.5 +
-        diagonalSweep * 0.6
+        beatPulse * 0.3 +  // Reduced from 0.5
+        diagonalSweep * 0.4  // Reduced from 0.6
       
-      panel.brightness += (panel.targetBrightness - panel.brightness) * 0.4
-      panel.hue = 0.85 - bands.beatIntensity * 0.15
+      // Slower interpolation for smoother transitions
+      panel.brightness += (panel.targetBrightness - panel.brightness) * 0.2  // Reduced from 0.4
+      panel.hue = 0.85 - bands.beatIntensity * 0.1  // Reduced from 0.15
     }
 
     const particlesPerPanel = Math.floor(count / TOTAL_PANELS)
@@ -100,14 +102,14 @@ export const ledMatrix: VisualizationMode = {
       const panel = panels[panelIndex]
       const localIndex = i % particlesPerPanel
       
-      const zPush = panel.brightness * 3 + bands.beatIntensity * 2
+      const zPush = panel.brightness * 2.5 + bands.beatIntensity * 1.2  // Reduced from 3 and 2
       positions[i * 3 + 2] = zPush
       
-      sizes[i] = 2 + panel.brightness * 5 + (localIndex === 7 ? bands.beatIntensity * 3 : 0)
+      sizes[i] = 2 + panel.brightness * 4 + (localIndex === 7 ? bands.beatIntensity * 2 : 0)  // Reduced multipliers
       
       const brightness = panel.brightness
       colors[i * 3] = 1.0 * brightness + 0.3
-      colors[i * 3 + 1] = 0.2 * brightness + bands.beatIntensity * 0.3
+      colors[i * 3 + 1] = 0.2 * brightness + bands.beatIntensity * 0.2  // Reduced from 0.3
       colors[i * 3 + 2] = 0.7 * brightness
     }
   }

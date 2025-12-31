@@ -22,9 +22,5 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src"],
-  "exclude": [
-    "src/lib/visualizations/galaxySpiral.ts",
-    "src/lib/visualizations/spherePulse.ts"
-  ]
+  "include": ["src"]
 }

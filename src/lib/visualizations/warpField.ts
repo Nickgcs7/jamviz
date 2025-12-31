@@ -1,0 +1,134 @@
+import type { VisualizationMode } from './types'
+import type { AudioBands } from '../AudioAnalyzer'
+
+// Attractor points that create warping
+interface Attractor {
+  x: number
+  y: number
+  strength: number
+  targetStrength: number
+  phase: number
+}
+
+const attractors: Attractor[] = []
+const NUM_ATTRACTORS = 3
+const ROWS = 80
+const COLS = 125
+
+export const warpField: VisualizationMode = {
+  id: 'warp_field',
+  name: 'Warp Field',
+  description: 'Parallel lines warped by audio-reactive attractors',
+
+  initParticles(positions: Float32Array, colors: Float32Array, count: number) {
+    attractors.length = 0
+    
+    // Initialize attractors
+    for (let a = 0; a < NUM_ATTRACTORS; a++) {
+      attractors.push({
+        x: (Math.random() - 0.5) * 40,
+        y: (Math.random() - 0.5) * 30,
+        strength: 5,
+        targetStrength: 5,
+        phase: Math.random() * Math.PI * 2
+      })
+    }
+
+    // Create horizontal line grid
+    const rowSpacing = 0.6
+    const colSpacing = 0.5
+    
+    for (let i = 0; i < count; i++) {
+      const row = i % ROWS
+      const col = Math.floor(i / ROWS)
+      
+      positions[i * 3] = (col - COLS / 2) * colSpacing
+      positions[i * 3 + 1] = (row - ROWS / 2) * rowSpacing
+      positions[i * 3 + 2] = 0
+
+      // Purple base with gradient
+      const rowFactor = row / ROWS
+      colors[i * 3] = 0.4 + rowFactor * 0.3     // R: purple to pink
+      colors[i * 3 + 1] = 0.1 + rowFactor * 0.1 // G: low
+      colors[i * 3 + 2] = 0.5 + rowFactor * 0.3 // B: purple
+    }
+  },
+
+  animate(
+    positions: Float32Array,
+    originalPositions: Float32Array,
+    sizes: Float32Array,
+    colors: Float32Array,
+    count: number,
+    bands: AudioBands,
+    time: number
+  ) {
+    // Update attractors
+    for (let a = 0; a < NUM_ATTRACTORS; a++) {
+      const attractor = attractors[a]
+      
+      // Move attractors based on audio
+      attractor.x = Math.sin(time * 0.5 + attractor.phase) * 20 * (1 + bands.midSmooth)
+      attractor.y = Math.cos(time * 0.4 + attractor.phase * 1.3) * 15 * (1 + bands.highSmooth)
+      
+      // Strength based on bass
+      attractor.targetStrength = 8 + bands.bassSmooth * 20 + bands.beatIntensity * 15
+      attractor.strength += (attractor.targetStrength - attractor.strength) * 0.3
+    }
+
+    // Spawn new attractor on beat (reposition existing)
+    if (bands.isBeat && bands.beatIntensity > 0.5) {
+      const spawnIndex = Math.floor(time * 10) % NUM_ATTRACTORS
+      attractors[spawnIndex].x = (Math.random() - 0.5) * 50
+      attractors[spawnIndex].y = (Math.random() - 0.5) * 35
+    }
+
+    // Base line wave
+    const baseWave = bands.highSmooth * 2
+
+    // Update particles
+    for (let i = 0; i < count; i++) {
+      const ox = originalPositions[i * 3]
+      const oy = originalPositions[i * 3 + 1]
+      const row = i % ROWS
+      const col = Math.floor(i / ROWS)
+      
+      // Calculate displacement from all attractors
+      let displaceY = 0
+      let totalInfluence = 0
+      
+      for (const attractor of attractors) {
+        const dx = ox - attractor.x
+        const dy = oy - attractor.y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        
+        if (dist < 25) {
+          const influence = Math.pow(1 - dist / 25, 2)
+          // Displacement creates the "warp" - push away from attractor
+          displaceY += influence * attractor.strength * Math.sign(dy)
+          totalInfluence += influence
+        }
+      }
+
+      // Subtle base wave motion
+      const lineWave = Math.sin(ox * 0.1 + time * 2 + row * 0.05) * baseWave
+      
+      // Apply positions
+      positions[i * 3] = ox
+      positions[i * 3 + 1] = oy + displaceY + lineWave
+      positions[i * 3 + 2] = totalInfluence * 5 // Z depth based on warp intensity
+
+      // Size: bigger where warped
+      sizes[i] = 1.2 + totalInfluence * 4 + bands.beatIntensity * 2
+
+      // Color: purple base, shifts to pink/orange in warped areas
+      const warpHeat = Math.min(1, totalInfluence * 2)
+      const rowFactor = row / ROWS
+      
+      // Purple -> Pink -> Orange gradient based on displacement
+      colors[i * 3] = 0.4 + warpHeat * 0.6 + bands.beatIntensity * 0.2    // R: increases with warp
+      colors[i * 3 + 1] = 0.1 + warpHeat * 0.2                            // G: slight increase
+      colors[i * 3 + 2] = 0.5 + rowFactor * 0.3 - warpHeat * 0.3          // B: decreases with warp
+    }
+  }
+}

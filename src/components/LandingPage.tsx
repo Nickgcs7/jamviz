@@ -45,7 +45,7 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         return 0.3 + noise * (isHovering ? 1.5 : 1)
       })
 
-      // Draw flowing waveform ribbons
+      // Draw flowing waveform ribbons - forest green to teal
       const centerY = canvas.height * 0.5
       const ribbonCount = 3
       
@@ -65,17 +65,18 @@ export default function LandingPage({ onStart }: LandingPageProps) {
           else ctx.lineTo(x, y)
         }
         
+        // Updated gradient: forest green -> emerald -> teal (#009aca)
         const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0)
-        gradient.addColorStop(0, `rgba(99, 102, 241, ${alpha})`)
-        gradient.addColorStop(0.5, `rgba(168, 85, 247, ${alpha * 1.5})`)
-        gradient.addColorStop(1, `rgba(236, 72, 153, ${alpha})`)
+        gradient.addColorStop(0, `rgba(34, 139, 34, ${alpha})`)     // Forest green
+        gradient.addColorStop(0.5, `rgba(16, 185, 129, ${alpha * 1.5})`)  // Emerald
+        gradient.addColorStop(1, `rgba(0, 154, 202, ${alpha})`)     // Teal (#009aca)
         
         ctx.strokeStyle = gradient
         ctx.lineWidth = 2
         ctx.stroke()
       }
 
-      // Floating particles
+      // Floating particles - updated to green/teal
       const particleCount = 40
       for (let i = 0; i < particleCount; i++) {
         const px = ((i * 137.5) % canvas.width + time * 20) % canvas.width
@@ -84,8 +85,8 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         const alpha = 0.1 + Math.sin(time + i * 0.5) * 0.05
         
         const gradient = ctx.createRadialGradient(px, py, 0, px, py, size * 4)
-        gradient.addColorStop(0, `rgba(168, 85, 247, ${alpha})`)
-        gradient.addColorStop(1, 'rgba(168, 85, 247, 0)')
+        gradient.addColorStop(0, `rgba(16, 185, 129, ${alpha})`)
+        gradient.addColorStop(1, 'rgba(16, 185, 129, 0)')
         
         ctx.fillStyle = gradient
         ctx.beginPath()
@@ -140,11 +141,11 @@ export default function LandingPage({ onStart }: LandingPageProps) {
       {/* Animated canvas background */}
       <canvas ref={canvasRef} className="absolute inset-0" />
 
-      {/* Gradient orb following mouse */}
+      {/* Gradient orb following mouse - updated to green/teal */}
       <div 
         className="absolute w-[800px] h-[800px] rounded-full pointer-events-none"
         style={{
-          background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(168,85,247,0.05) 40%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, rgba(0,154,202,0.05) 40%, transparent 70%)',
           left: `${mousePos.x * 100}%`,
           top: `${mousePos.y * 100}%`,
           transform: 'translate(-50%, -50%)',
@@ -156,8 +157,8 @@ export default function LandingPage({ onStart }: LandingPageProps) {
       {/* Drag overlay */}
       {dragOver && (
         <div className="absolute inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-violet-500/10 backdrop-blur-sm" />
-          <div className="relative border-2 border-dashed border-violet-500/50 rounded-2xl px-20 py-16">
+          <div className="absolute inset-0 bg-emerald-500/10 backdrop-blur-sm" />
+          <div className="relative border-2 border-dashed border-emerald-500/50 rounded-2xl px-20 py-16">
             <p className="text-white/80 text-lg tracking-wide">Drop your audio file</p>
           </div>
         </div>
@@ -168,12 +169,12 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         
         {/* Logo section */}
         <div className="flex flex-col items-center gap-2 mb-12">
-          {/* Waveform icon */}
+          {/* Waveform icon - updated to green/teal gradient */}
           <div className="flex items-center gap-[3px] mb-4">
             {[0.4, 0.7, 1, 0.8, 0.5, 0.9, 0.6, 0.75, 0.45].map((h, i) => (
               <div
                 key={i}
-                className="w-1 bg-gradient-to-t from-violet-600 to-fuchsia-500 rounded-full"
+                className="w-1 bg-gradient-to-t from-emerald-600 to-teal-500 rounded-full"
                 style={{
                   height: `${h * 32}px`,
                   animation: `pulse 1.5s ease-in-out ${i * 0.1}s infinite`
@@ -187,7 +188,7 @@ export default function LandingPage({ onStart }: LandingPageProps) {
             <span className="bg-gradient-to-r from-white via-white to-white/80 bg-clip-text text-transparent">
               Jam
             </span>
-            <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent">
               Viz
             </span>
           </h1>
@@ -205,8 +206,8 @@ export default function LandingPage({ onStart }: LandingPageProps) {
             onMouseLeave={() => setIsHovering(false)}
             className="group relative px-12 py-4 rounded-full overflow-hidden transition-all duration-500"
           >
-            {/* Button gradient background */}
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 opacity-90 group-hover:opacity-100 transition-opacity" />
+            {/* Button gradient background - updated to green/teal */}
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 opacity-90 group-hover:opacity-100 transition-opacity" />
             
             {/* Shine effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
@@ -225,13 +226,13 @@ export default function LandingPage({ onStart }: LandingPageProps) {
             className="hidden"
           />
 
-          {/* Source toggle */}
+          {/* Source toggle - updated colors */}
           <div className="flex items-center gap-2 p-1 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
             <button
               onClick={() => setSource('mic')}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm transition-all duration-300 ${
                 source === 'mic'
-                  ? 'bg-gradient-to-r from-violet-600/80 to-fuchsia-600/80 text-white shadow-lg shadow-violet-500/20'
+                  ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/80 text-white shadow-lg shadow-emerald-500/20'
                   : 'text-white/50 hover:text-white/80'
               }`}
             >
@@ -242,7 +243,7 @@ export default function LandingPage({ onStart }: LandingPageProps) {
               onClick={() => setSource('file')}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm transition-all duration-300 ${
                 source === 'file'
-                  ? 'bg-gradient-to-r from-violet-600/80 to-fuchsia-600/80 text-white shadow-lg shadow-violet-500/20'
+                  ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/80 text-white shadow-lg shadow-emerald-500/20'
                   : 'text-white/50 hover:text-white/80'
               }`}
             >

@@ -65,7 +65,6 @@ export const yuleLog: VisualizationMode = {
     time: number
   ) {
     const maxHeight = 25 + bands.bassSmooth * 25 + bands.beatIntensity * 15
-    const intensity = 1.5 + bands.midSmooth * 4 + bands.beatIntensity * 3
     const turbulence = 1 + bands.highSmooth * 5
     const sparkChance = 0.1 + bands.beatIntensity * 0.3
 

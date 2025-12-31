@@ -1,61 +1,58 @@
 import type { VisualizationMode, MouseCoords } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 
-// Particle state for fire simulation
-interface ParticleState {
+// Particle lifecycle state
+interface Ember {
   baseX: number
   baseZ: number
   life: number
   maxLife: number
-  velocity: number
-  flicker: number
+  speed: number
+  drift: number
   isSpark: boolean
 }
 
-const particleStates: ParticleState[] = []
+const embers: Ember[] = []
 
 export const yuleLog: VisualizationMode = {
   id: 'yule_log',
-  name: 'Yule Log',
-  description: 'Cozy fireplace with rising flames and sparks',
+  name: 'Inferno',
+  description: 'Roaring flames that dance with the beat',
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
-    particleStates.length = 0
+    embers.length = 0
     
-    // Log shape parameters
-    const logWidth = 25
-    const logDepth = 8
+    const baseWidth = 30
+    const baseDepth = 10
 
     for (let i = 0; i < count; i++) {
-      // Distribute particles in a log-shaped base
-      const baseX = (Math.random() - 0.5) * logWidth
-      const baseZ = (Math.random() - 0.5) * logDepth
-      const isSpark = Math.random() < 0.08 // 8% are sparks
+      const baseX = (Math.random() - 0.5) * baseWidth
+      const baseZ = (Math.random() - 0.5) * baseDepth
+      const isSpark = Math.random() < 0.12
 
       positions[i * 3] = baseX
-      positions[i * 3 + 1] = Math.random() * 5 // Start near bottom
+      positions[i * 3 + 1] = 0
       positions[i * 3 + 2] = baseZ
 
-      // Initialize particle state
-      particleStates.push({
+      embers.push({
         baseX,
         baseZ,
         life: Math.random(),
-        maxLife: 0.8 + Math.random() * 0.4,
-        velocity: 0.5 + Math.random() * 0.5,
-        flicker: Math.random() * Math.PI * 2,
+        maxLife: 0.6 + Math.random() * 0.5,
+        speed: 0.8 + Math.random() * 0.8,
+        drift: (Math.random() - 0.5) * 2,
         isSpark
       })
 
-      // Fire colors: yellow core to orange to red tips
+      // Fire colors: bright yellow core
       if (isSpark) {
         colors[i * 3] = 1.0
-        colors[i * 3 + 1] = 0.8 + Math.random() * 0.2
-        colors[i * 3 + 2] = 0.3 + Math.random() * 0.3
+        colors[i * 3 + 1] = 0.9
+        colors[i * 3 + 2] = 0.6
       } else {
         colors[i * 3] = 1.0
-        colors[i * 3 + 1] = 0.4 + Math.random() * 0.3
-        colors[i * 3 + 2] = 0.05 + Math.random() * 0.1
+        colors[i * 3 + 1] = 0.5 + Math.random() * 0.3
+        colors[i * 3 + 2] = 0.05
       }
     }
   },
@@ -70,76 +67,80 @@ export const yuleLog: VisualizationMode = {
     time: number,
     mouse?: MouseCoords
   ) {
-    const maxFlameHeight = 22 + bands.bassSmooth * 8
-    const flickerIntensity = 1 + bands.midSmooth * 2
-    const sparkTrigger = bands.highSmooth > 0.3 || bands.beatIntensity > 0.4
+    // DRAMATIC fire response to audio
+    const maxHeight = 25 + bands.bassSmooth * 25 + bands.beatIntensity * 15  // Fire ROARS with bass
+    const intensity = 1.5 + bands.midSmooth * 4 + bands.beatIntensity * 3
+    const turbulence = 1 + bands.highSmooth * 5
+    const sparkChance = 0.1 + bands.beatIntensity * 0.3  // More sparks on beats
 
-    // Mouse as wind source
-    const windX = mouse?.active ? mouse.x * 3 : 0
-    const windStrength = mouse?.active ? Math.abs(mouse.x) * 0.5 : 0
+    // Wind from mouse
+    const windX = mouse?.active ? mouse.x * 8 : 0
+    const windZ = mouse?.active ? mouse.y * 3 : 0
 
     for (let i = 0; i < count; i++) {
-      const state = particleStates[i]
+      const ember = embers[i]
 
-      // Advance life
-      state.life += 0.016 * state.velocity * (1 + bands.overallSmooth * 0.5)
+      // Advance life - FASTER with audio
+      const lifeSpeed = ember.speed * (1 + bands.overallSmooth * 1.5 + bands.beatIntensity * 0.8)
+      ember.life += 0.02 * lifeSpeed
       
-      // Reset when life exceeds max
-      if (state.life > state.maxLife) {
-        state.life = 0
-        state.velocity = 0.5 + Math.random() * 0.5
-        state.flicker = Math.random() * Math.PI * 2
-        state.isSpark = sparkTrigger && Math.random() < 0.15
+      // Reset ember
+      if (ember.life > ember.maxLife) {
+        ember.life = 0
+        ember.speed = 0.8 + Math.random() * 0.8
+        ember.drift = (Math.random() - 0.5) * 2
+        ember.isSpark = Math.random() < sparkChance
+        ember.baseX = (Math.random() - 0.5) * 30
+        ember.baseZ = (Math.random() - 0.5) * 10
       }
 
-      const lifeRatio = state.life / state.maxLife
+      const lifeRatio = ember.life / ember.maxLife
       
-      // Flame shape: narrow at base, wider as it rises, then tapers
-      const widthFactor = Math.sin(lifeRatio * Math.PI) * (1 + bands.bassSmooth * 0.3)
+      // Flame shape: wider in middle
+      const widthCurve = Math.sin(lifeRatio * Math.PI)
       
-      // Flickering horizontal movement
-      const flickerX = Math.sin(time * 8 + state.flicker + i * 0.01) * widthFactor * flickerIntensity
-      const flickerZ = Math.cos(time * 7 + state.flicker * 1.3) * widthFactor * 0.5 * flickerIntensity
+      // Turbulent flicker - MORE with audio
+      const flickerX = Math.sin(time * 12 + ember.drift * 10 + i * 0.02) * widthCurve * turbulence
+      const flickerZ = Math.cos(time * 10 + ember.drift * 8) * widthCurve * turbulence * 0.4
 
-      // Height with acceleration curve (faster at top)
-      const heightCurve = Math.pow(lifeRatio, 0.7)
-      const height = heightCurve * maxFlameHeight
+      // Height curve - accelerating upward
+      const heightCurve = Math.pow(lifeRatio, 0.5)
+      let height = heightCurve * maxHeight
 
-      // Spark behavior: more erratic, faster, drift outward
-      let sparkDrift = 0
-      let sparkHeight = 0
-      if (state.isSpark) {
-        sparkDrift = Math.sin(time * 15 + i) * (3 + lifeRatio * 5)
-        sparkHeight = lifeRatio * 8 // Extra height for sparks
+      // Sparks go higher and more erratic
+      let sparkOffset = 0
+      if (ember.isSpark) {
+        sparkOffset = Math.sin(time * 20 + i) * (5 + lifeRatio * 10)
+        height += lifeRatio * 15
       }
 
-      // Apply wind from mouse
-      const windEffect = windX * lifeRatio * (state.isSpark ? 2 : 1)
+      // Apply wind
+      const windEffect = (windX * lifeRatio * 2) + (ember.isSpark ? windX * 2 : 0)
 
-      positions[i * 3] = state.baseX + flickerX * 2 + sparkDrift + windEffect
-      positions[i * 3 + 1] = height + sparkHeight
-      positions[i * 3 + 2] = state.baseZ + flickerZ + windStrength * lifeRatio
+      positions[i * 3] = ember.baseX + flickerX * 4 + ember.drift * lifeRatio * 8 + sparkOffset + windEffect
+      positions[i * 3 + 1] = height - 15 // Center vertically
+      positions[i * 3 + 2] = ember.baseZ + flickerZ * 2 + windZ * lifeRatio
 
-      // Size: larger at base, smaller at top, sparks are small and bright
-      if (state.isSpark) {
-        sizes[i] = 1 + (1 - lifeRatio) * 1.5 + bands.highSmooth * 2
+      // Size: big at base, small at top
+      const baseSizeFactor = Math.pow(1 - lifeRatio, 0.7)
+      if (ember.isSpark) {
+        sizes[i] = 1.5 + (1 - lifeRatio) * 2 + bands.highSmooth * 3 + bands.beatIntensity * 2
       } else {
-        const baseSizeFactor = 1 - lifeRatio * 0.6
-        sizes[i] = 2 + baseSizeFactor * 3 + bands.overallSmooth * 1.5 + bands.beatIntensity * 1
+        sizes[i] = 2.5 + baseSizeFactor * 5 + bands.bassSmooth * 4 + bands.beatIntensity * 3
       }
 
-      // Color gradient: yellow at base -> orange -> red -> dark at tips
-      if (state.isSpark) {
-        // Sparks: bright yellow-white
+      // Color: yellow base → orange → red → dark tips
+      const heatGradient = 1 - lifeRatio
+      if (ember.isSpark) {
+        // Sparks: bright yellow-white, fade to orange
         colors[i * 3] = 1.0
-        colors[i * 3 + 1] = 0.7 + (1 - lifeRatio) * 0.3
-        colors[i * 3 + 2] = 0.3 + (1 - lifeRatio) * 0.4
+        colors[i * 3 + 1] = 0.7 + heatGradient * 0.3 + bands.beatIntensity * 0.2
+        colors[i * 3 + 2] = 0.3 + heatGradient * 0.5
       } else {
-        // Flames: yellow -> orange -> red
-        const heatGradient = 1 - lifeRatio
-        colors[i * 3] = 0.9 + heatGradient * 0.1 + bands.beatIntensity * 0.1
-        colors[i * 3 + 1] = 0.2 + heatGradient * 0.5 + bands.midSmooth * 0.1
-        colors[i * 3 + 2] = 0.02 + heatGradient * 0.08
+        // Main flames: yellow → orange → red
+        colors[i * 3] = 0.95 + bands.beatIntensity * 0.05
+        colors[i * 3 + 1] = 0.15 + heatGradient * 0.65 + bands.bassSmooth * 0.15
+        colors[i * 3 + 2] = heatGradient * 0.1
       }
     }
   }

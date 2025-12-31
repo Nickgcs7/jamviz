@@ -1,43 +1,53 @@
 import type { VisualizationMode, MouseCoords } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 
-// Blob center storage for organic movement
-const blobCenters: { x: number; y: number; z: number; phase: number; speed: number }[] = []
-const NUM_BLOBS = 8
+// Blob centers for organic clustering
+interface Blob {
+  x: number
+  y: number  
+  z: number
+  phase: number
+  speed: number
+  size: number
+}
+
+const blobs: Blob[] = []
+const NUM_BLOBS = 6
 
 export const lavaLamp: VisualizationMode = {
   id: 'lava_lamp',
   name: 'Lava Lamp',
-  description: 'Soft rising/falling blobs with organic clustering',
+  description: 'Deep purple organic blobs',
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     // Initialize blob centers
-    blobCenters.length = 0
+    blobs.length = 0
     for (let b = 0; b < NUM_BLOBS; b++) {
-      blobCenters.push({
-        x: (Math.random() - 0.5) * 20,
-        y: (Math.random() - 0.5) * 30,
-        z: (Math.random() - 0.5) * 20,
+      blobs.push({
+        x: (Math.random() - 0.5) * 24,
+        y: (Math.random() - 0.5) * 35,
+        z: (Math.random() - 0.5) * 24,
         phase: Math.random() * Math.PI * 2,
-        speed: 0.3 + Math.random() * 0.4
+        speed: 0.4 + Math.random() * 0.5,
+        size: 12 + Math.random() * 8
       })
     }
 
-    // Distribute particles in a cylindrical volume
+    // Distribute particles in cylinder
     for (let i = 0; i < count; i++) {
       const theta = Math.random() * Math.PI * 2
-      const r = Math.random() * 15
-      const y = (Math.random() - 0.5) * 40
+      const r = Math.random() * 18
+      const y = (Math.random() - 0.5) * 45
 
       positions[i * 3] = r * Math.cos(theta)
       positions[i * 3 + 1] = y
       positions[i * 3 + 2] = r * Math.sin(theta)
 
-      // Warm lava colors: orange to magenta
+      // Deep purple/magenta/violet palette
       const t = Math.random()
-      colors[i * 3] = 0.9 + t * 0.1      // Red: high
-      colors[i * 3 + 1] = 0.2 + t * 0.3  // Green: low-medium
-      colors[i * 3 + 2] = 0.1 + t * 0.4  // Blue: low-medium
+      colors[i * 3] = 0.5 + t * 0.4       // R: medium-high
+      colors[i * 3 + 1] = 0.1 + t * 0.15  // G: low (purple)
+      colors[i * 3 + 2] = 0.6 + t * 0.4   // B: high (violet)
     }
   },
 
@@ -51,84 +61,94 @@ export const lavaLamp: VisualizationMode = {
     time: number,
     mouse?: MouseCoords
   ) {
-    // Update blob centers with organic motion
+    // Update blob positions - MUCH more dramatic movement
     for (let b = 0; b < NUM_BLOBS; b++) {
-      const blob = blobCenters[b]
-      const verticalSpeed = blob.speed * (0.8 + bands.bassSmooth * 0.5)
+      const blob = blobs[b]
       
-      // Sinusoidal vertical motion (rising and falling)
-      blob.y = Math.sin(time * verticalSpeed + blob.phase) * 18
+      // Vertical oscillation driven by bass
+      const verticalRange = 20 + bands.bassSmooth * 15
+      blob.y = Math.sin(time * blob.speed + blob.phase) * verticalRange
       
-      // Gentle horizontal drift
-      blob.x += Math.sin(time * 0.3 + blob.phase) * 0.02
-      blob.z += Math.cos(time * 0.25 + blob.phase * 1.3) * 0.02
+      // Horizontal drift increases with mids
+      const driftSpeed = 0.04 + bands.midSmooth * 0.08
+      blob.x += Math.sin(time * 0.5 + blob.phase) * driftSpeed
+      blob.z += Math.cos(time * 0.4 + blob.phase * 1.3) * driftSpeed
       
-      // Keep within bounds
-      blob.x = Math.max(-12, Math.min(12, blob.x))
-      blob.z = Math.max(-12, Math.min(12, blob.z))
+      // Blob size pulses with beat
+      blob.size = 12 + bands.bassSmooth * 10 + bands.beatIntensity * 8
+      
+      // Wrap around bounds
+      if (blob.x > 16) blob.x = -16
+      if (blob.x < -16) blob.x = 16
+      if (blob.z > 16) blob.z = -16
+      if (blob.z < -16) blob.z = 16
     }
 
-    // Mouse influence
-    const mouseX = mouse?.active ? mouse.x * 20 : 0
-    const mouseY = mouse?.active ? mouse.y * 25 : 0
+    // Mouse repulsion
+    const mouseX = mouse?.active ? mouse.x * 25 : 0
+    const mouseY = mouse?.active ? mouse.y * 30 : 0
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
       const oy = originalPositions[i * 3 + 1]
       const oz = originalPositions[i * 3 + 2]
 
-      // Find nearest blob and calculate attraction
+      // Calculate attraction to all blobs
       let attractX = 0, attractY = 0, attractZ = 0
       let totalInfluence = 0
+      let nearestBlobDist = 1000
 
-      for (const blob of blobCenters) {
+      for (const blob of blobs) {
         const dx = blob.x - ox
         const dy = blob.y - oy
         const dz = blob.z - oz
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
         
-        if (dist < 18) {
-          const influence = Math.pow(1 - dist / 18, 2) * (1 + bands.bassSmooth)
-          attractX += dx * influence * 0.15
-          attractY += dy * influence * 0.15
-          attractZ += dz * influence * 0.15
+        nearestBlobDist = Math.min(nearestBlobDist, dist)
+        
+        if (dist < blob.size) {
+          // Strong attraction when inside blob radius
+          const influence = Math.pow(1 - dist / blob.size, 1.5) * (1 + bands.bassSmooth * 2)
+          const strength = 0.4 + bands.beatIntensity * 0.3
+          attractX += dx * influence * strength
+          attractY += dy * influence * strength
+          attractZ += dz * influence * strength
           totalInfluence += influence
         }
       }
 
-      // Base vertical motion (thermal convection)
-      const thermalRise = Math.sin(time * 0.8 + ox * 0.1 + oz * 0.1) * 3 * (1 + bands.midSmooth)
-      
-      // Gentle wobble
-      const wobbleX = Math.sin(time * 1.2 + i * 0.001) * 0.5
-      const wobbleZ = Math.cos(time * 1.1 + i * 0.0012) * 0.5
+      // Gentle ambient motion
+      const drift = Math.sin(time * 0.6 + i * 0.002) * 2
+      const wobbleX = Math.sin(time * 1.5 + i * 0.001) * (1 + bands.highSmooth * 2)
+      const wobbleZ = Math.cos(time * 1.3 + i * 0.0015) * (1 + bands.highSmooth * 2)
 
-      // Mouse repulsion (lava moves away gently)
+      // Mouse repulsion
       let mouseRepelX = 0, mouseRepelY = 0
       if (mouse?.active) {
-        const mdx = ox - mouseX
-        const mdy = oy - mouseY
+        const mdx = (ox + attractX) - mouseX
+        const mdy = (oy + attractY) - mouseY
         const mDist = Math.sqrt(mdx * mdx + mdy * mdy)
-        if (mDist < 12 && mDist > 0.1) {
-          const repelForce = (1 - mDist / 12) * 4
+        if (mDist < 15 && mDist > 0.1) {
+          const repelForce = Math.pow(1 - mDist / 15, 2) * 12
           mouseRepelX = (mdx / mDist) * repelForce
           mouseRepelY = (mdy / mDist) * repelForce
         }
       }
 
       positions[i * 3] = ox + attractX + wobbleX + mouseRepelX
-      positions[i * 3 + 1] = oy + attractY + thermalRise + mouseRepelY
+      positions[i * 3 + 1] = oy + attractY + drift + mouseRepelY
       positions[i * 3 + 2] = oz + attractZ + wobbleZ
 
-      // Size based on clustering (bigger in blob centers)
-      const clusterFactor = Math.min(1, totalInfluence * 0.5)
-      sizes[i] = 2 + clusterFactor * 3 + bands.overallSmooth * 2 + bands.beatIntensity * 1.5
+      // Size: BIG when in blob, small when dispersed
+      const inBlob = totalInfluence > 0.3
+      const blobSize = inBlob ? 4 + totalInfluence * 6 : 1.5
+      sizes[i] = blobSize + bands.overallSmooth * 3 + bands.beatIntensity * 4
 
-      // Color shifts: warmer when clustered, cooler when dispersed
-      const warmth = 0.5 + clusterFactor * 0.5 + bands.bassSmooth * 0.3
-      colors[i * 3] = 0.8 + warmth * 0.2 + bands.beatIntensity * 0.1
-      colors[i * 3 + 1] = 0.15 + warmth * 0.25 + bands.midSmooth * 0.15
-      colors[i * 3 + 2] = 0.1 + (1 - warmth) * 0.3 + bands.highSmooth * 0.2
+      // Color: bright magenta in blobs, deep purple when dispersed
+      const heat = Math.min(1, totalInfluence * 1.5)
+      colors[i * 3] = 0.5 + heat * 0.5 + bands.beatIntensity * 0.2     // R: magenta
+      colors[i * 3 + 1] = 0.05 + heat * 0.2 + bands.midSmooth * 0.15  // G: low
+      colors[i * 3 + 2] = 0.6 + heat * 0.3 - bands.bassSmooth * 0.2   // B: violet/purple
     }
   }
 }

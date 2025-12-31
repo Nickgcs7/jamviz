@@ -66,7 +66,8 @@ export const lavaLamp: VisualizationMode = {
       blob.x += Math.sin(time * 0.5 + blob.phase) * driftSpeed
       blob.z += Math.cos(time * 0.4 + blob.phase * 1.3) * driftSpeed
       
-      blob.size = 12 + bands.bassSmooth * 10 + bands.beatIntensity * 8
+      // Reduced beat intensity effect on blob size
+      blob.size = 12 + bands.bassSmooth * 10 + bands.beatIntensity * 5  // Reduced from 8
       
       if (blob.x > 16) blob.x = -16
       if (blob.x < -16) blob.x = 16
@@ -90,7 +91,7 @@ export const lavaLamp: VisualizationMode = {
         
         if (dist < blob.size) {
           const influence = Math.pow(1 - dist / blob.size, 1.5) * (1 + bands.bassSmooth * 2)
-          const strength = 0.4 + bands.beatIntensity * 0.3
+          const strength = 0.4 + bands.beatIntensity * 0.2  // Reduced from 0.3
           attractX += dx * influence * strength
           attractY += dy * influence * strength
           attractZ += dz * influence * strength
@@ -108,10 +109,11 @@ export const lavaLamp: VisualizationMode = {
 
       const inBlob = totalInfluence > 0.3
       const blobSize = inBlob ? 4 + totalInfluence * 6 : 1.5
-      sizes[i] = blobSize + bands.overallSmooth * 3 + bands.beatIntensity * 4
+      // Reduced beat intensity effect on particle sizes
+      sizes[i] = blobSize + bands.overallSmooth * 3 + bands.beatIntensity * 2.5  // Reduced from 4
 
       const heat = Math.min(1, totalInfluence * 1.5)
-      colors[i * 3] = 0.5 + heat * 0.5 + bands.beatIntensity * 0.2
+      colors[i * 3] = 0.5 + heat * 0.5 + bands.beatIntensity * 0.15  // Reduced from 0.2
       colors[i * 3 + 1] = 0.05 + heat * 0.2 + bands.midSmooth * 0.15
       colors[i * 3 + 2] = 0.6 + heat * 0.3 - bands.bassSmooth * 0.2
     }

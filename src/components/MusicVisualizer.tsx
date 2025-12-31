@@ -195,10 +195,10 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         bands = analyzerRef.current.getBands()
       }
 
-      // Dynamic post-processing
-      rgbShiftPass.uniforms['amount'].value = 0.0006 + bands.overallSmooth * 0.003 + bands.beatIntensity * 0.006
+      // Dynamic post-processing - reduced beat intensity effects
+      rgbShiftPass.uniforms['amount'].value = 0.0006 + bands.overallSmooth * 0.003 + bands.beatIntensity * 0.003  // Reduced from 0.006
       afterimagePass.uniforms['damp'].value = 0.5 + bands.overallSmooth * 0.25
-      bloomPass.strength = 0.4 + bands.beatIntensity * 0.8 + bands.bassSmooth * 0.4
+      bloomPass.strength = 0.4 + bands.beatIntensity * 0.5 + bands.bassSmooth * 0.3  // Reduced from 0.8 and 0.4
 
       // Run visualization
       currentMode.animate(
@@ -225,7 +225,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       particles.geometry.attributes.customColor.needsUpdate = true
 
       // Camera movement
-      const targetCameraX = Math.sin(time * 0.1) * 5 + bands.midSmooth * 8 + bands.beatIntensity * 6
+      const targetCameraX = Math.sin(time * 0.1) * 5 + bands.midSmooth * 8 + bands.beatIntensity * 4  // Reduced from 6
       const targetCameraY = Math.cos(time * 0.12) * 3 + bands.highSmooth * 5
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
@@ -234,7 +234,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       camera.lookAt(0, 0, 0)
 
       // Rotation
-      const targetRotationSpeed = 0.0004 + bands.overallSmooth * 0.01 + bands.beatIntensity * 0.008
+      const targetRotationSpeed = 0.0004 + bands.overallSmooth * 0.01 + bands.beatIntensity * 0.005  // Reduced from 0.008
       refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
       particles.rotation.y += refs.currentRotationSpeed
       particles.rotation.x += refs.currentRotationSpeed * 0.15

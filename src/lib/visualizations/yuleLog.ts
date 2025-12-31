@@ -62,7 +62,7 @@ export const yuleLog: VisualizationMode = {
 
   animate(
     positions: Float32Array,
-    originalPositions: Float32Array,
+    _originalPositions: Float32Array,
     sizes: Float32Array,
     colors: Float32Array,
     count: number,

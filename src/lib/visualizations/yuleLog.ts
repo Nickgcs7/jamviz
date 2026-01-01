@@ -288,7 +288,6 @@ export const yuleLog: VisualizationMode = {
       
       // Flame shape: wider at base, narrower at top
       const taperFactor = 1 - flame.heightInTongue * 0.7
-      const currentWidth = tongue.width * taperFactor
       
       // Wavy motion (more at top)
       const waveAmount = flame.heightInTongue * tongue.swayAmount * (1 + bands.highSmooth)

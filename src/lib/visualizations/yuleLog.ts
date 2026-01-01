@@ -1,57 +1,75 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
+import { hslToRgb } from '../colorUtils'
 
 interface Ember {
-  baseX: number
-  baseZ: number
+  x: number
+  y: number
+  z: number
+  vx: number
+  vy: number
+  vz: number
   life: number
   maxLife: number
-  speed: number
-  drift: number
-  isSpark: boolean
+  size: number
+  hue: number
 }
 
 const embers: Ember[] = []
+const MAX_EMBERS = 10000
+
+function spawnEmber(bands: AudioBands): Ember {
+  const spread = 12 + bands.bassSmooth * 8
+  const intensity = 0.5 + bands.overallSmooth * 0.8 + bands.beatIntensity * 0.5
+  
+  return {
+    x: (Math.random() - 0.5) * spread,
+    y: -20 + Math.random() * 5,
+    z: (Math.random() - 0.5) * 10, // Depth variation
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: (0.8 + Math.random() * 1.2) * intensity,
+    vz: (Math.random() - 0.5) * 0.4,
+    life: 1.0,
+    maxLife: 2 + Math.random() * 2,
+    size: 1 + Math.random() * 2 + bands.beatIntensity * 2,
+    hue: 0.05 + Math.random() * 0.08 // Orange-red range
+  }
+}
 
 export const yuleLog: VisualizationMode = {
   id: 'yule_log',
-  name: 'Inferno',
-  description: 'Roaring flames that dance with the beat',
+  name: 'Yule Log',
+  description: 'Warm flickering fire with depth embers',
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     embers.length = 0
     
-    const baseWidth = 30
-    const baseDepth = 10
+    const defaultBands: AudioBands = {
+      bass: 0, mid: 0, high: 0, overall: 0,
+      bassSmooth: 0, midSmooth: 0, highSmooth: 0, overallSmooth: 0.3,
+      isBeat: false, beatIntensity: 0
+    }
+    
+    for (let i = 0; i < MAX_EMBERS; i++) {
+      embers.push(spawnEmber(defaultBands))
+      embers[i].life = Math.random() // Spread initial lifetimes
+      embers[i].y = -20 + Math.random() * 45 // Spread initial heights
+    }
 
     for (let i = 0; i < count; i++) {
-      const baseX = (Math.random() - 0.5) * baseWidth
-      const baseZ = (Math.random() - 0.5) * baseDepth
-      const isSpark = Math.random() < 0.12
-
-      positions[i * 3] = baseX
-      positions[i * 3 + 1] = 0
-      positions[i * 3 + 2] = baseZ
-
-      embers.push({
-        baseX,
-        baseZ,
-        life: Math.random(),
-        maxLife: 0.6 + Math.random() * 0.5,
-        speed: 0.8 + Math.random() * 0.8,
-        drift: (Math.random() - 0.5) * 2,
-        isSpark
-      })
-
-      if (isSpark) {
-        colors[i * 3] = 1.0
-        colors[i * 3 + 1] = 0.9
-        colors[i * 3 + 2] = 0.6
-      } else {
-        colors[i * 3] = 1.0
-        colors[i * 3 + 1] = 0.5 + Math.random() * 0.3
-        colors[i * 3 + 2] = 0.05
+      if (i < MAX_EMBERS) {
+        const ember = embers[i]
+        positions[i * 3] = ember.x
+        positions[i * 3 + 1] = ember.y
+        positions[i * 3 + 2] = ember.z
       }
+
+      // Warm fire colors
+      const t = Math.random()
+      const [r, g, b] = hslToRgb(0.06 - t * 0.04, 0.95, 0.5 + t * 0.2)
+      colors[i * 3] = r
+      colors[i * 3 + 1] = g
+      colors[i * 3 + 2] = b
     }
   },
 
@@ -64,61 +82,63 @@ export const yuleLog: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
-    const maxHeight = 25 + bands.bassSmooth * 25 + bands.beatIntensity * 15
-    const turbulence = 1 + bands.highSmooth * 5
-    const sparkChance = 0.1 + bands.beatIntensity * 0.3
+    const dt = 0.016
+    const windX = Math.sin(time * 0.5) * 0.3 * (1 + bands.midSmooth)
+    const turbulence = bands.highSmooth * 0.4
+    const intensity = 0.8 + bands.overallSmooth * 0.6 + bands.beatIntensity * 0.4
 
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < MAX_EMBERS && i < count; i++) {
       const ember = embers[i]
-
-      const lifeSpeed = ember.speed * (1 + bands.overallSmooth * 1.5 + bands.beatIntensity * 0.8)
-      ember.life += 0.02 * lifeSpeed
       
-      if (ember.life > ember.maxLife) {
-        ember.life = 0
-        ember.speed = 0.8 + Math.random() * 0.8
-        ember.drift = (Math.random() - 0.5) * 2
-        ember.isSpark = Math.random() < sparkChance
-        ember.baseX = (Math.random() - 0.5) * 30
-        ember.baseZ = (Math.random() - 0.5) * 10
-      }
-
-      const lifeRatio = ember.life / ember.maxLife
-      const widthCurve = Math.sin(lifeRatio * Math.PI)
+      // Physics update
+      ember.vy += 0.02 * intensity
+      ember.vx += windX * 0.01 + (Math.random() - 0.5) * turbulence * 0.1
+      ember.vz += (Math.random() - 0.5) * turbulence * 0.08 // Z turbulence
       
-      const flickerX = Math.sin(time * 12 + ember.drift * 10 + i * 0.02) * widthCurve * turbulence
-      const flickerZ = Math.cos(time * 10 + ember.drift * 8) * widthCurve * turbulence * 0.4
-
-      const heightCurve = Math.pow(lifeRatio, 0.5)
-      let height = heightCurve * maxHeight
-
-      let sparkOffset = 0
-      if (ember.isSpark) {
-        sparkOffset = Math.sin(time * 20 + i) * (5 + lifeRatio * 10)
-        height += lifeRatio * 15
+      ember.x += ember.vx * dt * 60
+      ember.y += ember.vy * dt * 60
+      ember.z += ember.vz * dt * 60
+      
+      // Damping
+      ember.vx *= 0.98
+      ember.vz *= 0.97
+      
+      ember.life -= dt / ember.maxLife
+      
+      // Respawn dead embers
+      if (ember.life <= 0 || ember.y > 28) {
+        const newEmber = spawnEmber(bands)
+        ember.x = newEmber.x
+        ember.y = newEmber.y
+        ember.z = newEmber.z
+        ember.vx = newEmber.vx
+        ember.vy = newEmber.vy
+        ember.vz = newEmber.vz
+        ember.life = 1.0
+        ember.maxLife = newEmber.maxLife
+        ember.size = newEmber.size
+        ember.hue = newEmber.hue
       }
-
-      positions[i * 3] = ember.baseX + flickerX * 4 + ember.drift * lifeRatio * 8 + sparkOffset
-      positions[i * 3 + 1] = height - 15
-      positions[i * 3 + 2] = ember.baseZ + flickerZ * 2
-
-      const baseSizeFactor = Math.pow(1 - lifeRatio, 0.7)
-      if (ember.isSpark) {
-        sizes[i] = 1.5 + (1 - lifeRatio) * 2 + bands.highSmooth * 3 + bands.beatIntensity * 2
-      } else {
-        sizes[i] = 2.5 + baseSizeFactor * 5 + bands.bassSmooth * 4 + bands.beatIntensity * 3
-      }
-
-      const heatGradient = 1 - lifeRatio
-      if (ember.isSpark) {
-        colors[i * 3] = 1.0
-        colors[i * 3 + 1] = 0.7 + heatGradient * 0.3 + bands.beatIntensity * 0.2
-        colors[i * 3 + 2] = 0.3 + heatGradient * 0.5
-      } else {
-        colors[i * 3] = 0.95 + bands.beatIntensity * 0.05
-        colors[i * 3 + 1] = 0.15 + heatGradient * 0.65 + bands.bassSmooth * 0.15
-        colors[i * 3 + 2] = heatGradient * 0.1
-      }
+      
+      positions[i * 3] = ember.x
+      positions[i * 3 + 1] = ember.y
+      positions[i * 3 + 2] = ember.z
+      
+      // Size fades with life, pulses with beat
+      const lifeFactor = ember.life * ember.life
+      sizes[i] = ember.size * lifeFactor * intensity + bands.beatIntensity * 1.5 * lifeFactor
+      
+      // Color: hot core (yellow-white) to cooler edges (red-orange)
+      // Life determines temperature: young = hot, old = cool
+      const temperature = ember.life
+      const hue = ember.hue + (1 - temperature) * 0.02 // Shift to red as it cools
+      const saturation = 0.85 - temperature * 0.15 // Core is less saturated (whiter)
+      const lightness = 0.35 + temperature * 0.35 + bands.beatIntensity * 0.1
+      
+      const [r, g, b] = hslToRgb(hue, saturation, lightness)
+      colors[i * 3] = r * lifeFactor + (1 - lifeFactor) * 0.1
+      colors[i * 3 + 1] = g * lifeFactor
+      colors[i * 3 + 2] = b * lifeFactor * 0.5
     }
   }
 }

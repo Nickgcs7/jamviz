@@ -120,7 +120,6 @@ export const waveField: VisualizationMode = {
           for (let x = 0; x < GRID_WIDTH; x++) {
             // Distance from center for effects
             const centerX = Math.abs(x - GRID_WIDTH / 2) / (GRID_WIDTH / 2)
-            const depthFactor = z / GRID_DEPTH
             
             // Angular, geometric height calculation
             // Bass creates big angular peaks
@@ -242,18 +241,18 @@ export const waveField: VisualizationMode = {
             pos[(vertexIndex + 1) * 3 + 1] = y2
             pos[(vertexIndex + 1) * 3 + 2] = -z2Pos
             
-            const depthFactor = (z + 0.5) / GRID_DEPTH
+            const vertDepthFactor = (z + 0.5) / GRID_DEPTH
             const avgHeight = (height1 + height2) / 2
             const heightIntensity = Math.min(1, Math.abs(avgHeight) / 10)
             
             // Vertical lines more cyan-shifted
-            const baseHue = 0.55 - depthFactor * 0.1
+            const baseHue = 0.55 - vertDepthFactor * 0.1
             const hue = baseHue + cycleHue * 0.3 + heightIntensity * 0.15
             
             const lightness = 0.35 + heightIntensity * 0.35 + bands.beatIntensity * 0.15
             const saturation = 0.85
             
-            const alpha = 1 - depthFactor * 0.7
+            const alpha = 1 - vertDepthFactor * 0.7
             
             const [r, g, b] = hslToRgb(hue, saturation, lightness)
             col[vertexIndex * 3] = r * alpha

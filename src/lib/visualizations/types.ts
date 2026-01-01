@@ -29,4 +29,14 @@ export interface VisualizationMode {
   
   // Optional: Whether to hide default particles (useful for line-only visualizations)
   hideParticles?: boolean
+  
+  // Optional: Text configuration for visualizations that support text input
+  textConfig?: {
+    enabled: boolean
+    placeholder: string
+    defaultText: string
+  }
+  
+  // Optional: Method to update text (called when user changes text input)
+  setText?: (text: string) => void
 }

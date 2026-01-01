@@ -71,7 +71,6 @@ let coreGlowMaterial: THREE.MeshBasicMaterial | null = null
 let lastBeatTime = 0
 let lastBassHitTime = 0
 let cumulativeExplosionForce = 0
-let currentCoreHue = 0
 
 // ============================================================================
 // INITIALIZATION
@@ -151,7 +150,7 @@ function initDebrisParticles() {
 // BURST TRIGGER FUNCTIONS
 // ============================================================================
 
-function triggerJetBurst(time: number, intensity: number) {
+function triggerJetBurst(intensity: number) {
   let particlesActivated = 0
   const particlesToActivate = Math.floor(JET_PARTICLES * 0.3 * intensity)
   
@@ -331,7 +330,6 @@ export const explosion: VisualizationMode = {
       update: (bands: AudioBands, time: number) => {
         const dt = 0.016
         const cycleHue = getCyclingHue(time)
-        currentCoreHue = cycleHue
 
         // Update core glow
         if (coreGlowMesh && coreGlowMaterial) {
@@ -445,7 +443,7 @@ export const explosion: VisualizationMode = {
     // Trigger jet burst on beat
     if (bands.isBeat && time - lastBeatTime > 0.15) {
       lastBeatTime = time
-      triggerJetBurst(time, 0.5 + bands.beatIntensity)
+      triggerJetBurst(0.5 + bands.beatIntensity)
     }
 
     // ========================================================================

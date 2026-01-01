@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 export const waveField: VisualizationMode = {
   id: 'wave_field',
@@ -41,6 +41,9 @@ export const waveField: VisualizationMode = {
     const midHeight = bands.midSmooth * 10
     const highRipple = bands.highSmooth * 5
     const beatWave = bands.beatIntensity * 12
+    
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
@@ -61,14 +64,14 @@ export const waveField: VisualizationMode = {
       // Add Z depth variation
       positions[i * 3 + 2] = oz + Math.sin(time * 0.5 + ox * 0.1) * 2 * bands.midSmooth
       
-      // Dynamic HSL-based coloring
+      // Dynamic HSL-based coloring with cycling
       const normalizedHeight = (totalHeight + 20) / 40
       const heightFactor = Math.max(0, Math.min(1, normalizedHeight))
       
-      // Hue shifts with frequency: bass = deeper blue, treble = cyan/green
-      const hue = 0.52 + heightFactor * 0.12 - bands.bassSmooth * 0.08 + bands.highSmooth * 0.1
+      // Base hue + height variation + frequency shifts + COLOR CYCLING
+      const hue = cycleHue + heightFactor * 0.12 - bands.bassSmooth * 0.08 + bands.highSmooth * 0.1
       const saturation = 0.65 + bands.overallSmooth * 0.2
-      const lightness = 0.45 + heightFactor * 0.25 + bands.beatIntensity * 0.15
+      const lightness = 0.45 + heightFactor * 0.2 + bands.beatIntensity * 0.1
       
       const [r, g, b] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = r

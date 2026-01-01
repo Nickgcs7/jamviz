@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 interface Attractor {
   x: number
@@ -66,6 +66,9 @@ export const warpField: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
+    
     // Animate attractors with 3D movement
     for (let a = 0; a < NUM_ATTRACTORS; a++) {
       const attractor = attractors[a]
@@ -121,14 +124,14 @@ export const warpField: VisualizationMode = {
 
       sizes[i] = 1.0 + totalInfluence * 3.5 + bands.beatIntensity * 1.8
 
-      // Color based on warp intensity and attractor influence
+      // Color with cycling and warp influence
       const warpHeat = Math.min(1, totalInfluence * 1.8)
       const normalizedHue = totalInfluence > 0 ? hueInfluence / totalInfluence : 0
       const rowFactor = row / ROWS
       
-      const hue = 0.78 + rowFactor * 0.1 + normalizedHue + warpHeat * 0.1 - bands.bassSmooth * 0.06
+      const hue = cycleHue + rowFactor * 0.1 + normalizedHue + warpHeat * 0.1 - bands.bassSmooth * 0.06
       const saturation = 0.65 + warpHeat * 0.25 + bands.beatIntensity * 0.1
-      const lightness = 0.4 + warpHeat * 0.3 + bands.beatIntensity * 0.12
+      const lightness = 0.4 + warpHeat * 0.25 + bands.beatIntensity * 0.1
       
       const [r, g, b] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = r

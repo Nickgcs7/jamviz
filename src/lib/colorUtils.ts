@@ -1,4 +1,11 @@
 /**
+ * Hue cycling speed - controls how fast colors rotate through the spectrum
+ * Lower = slower cycling, Higher = faster cycling
+ * 0.03 = full spectrum cycle every ~35 seconds
+ */
+export const HUE_CYCLE_SPEED = 0.03
+
+/**
  * HSL to RGB conversion for dynamic, smooth color transitions
  */
 export function hslToRgb(h: number, s: number, l: number): [number, number, number] {
@@ -27,6 +34,14 @@ export function hslToRgb(h: number, s: number, l: number): [number, number, numb
     hue2rgb(p, q, h),
     hue2rgb(p, q, h - 1/3)
   ]
+}
+
+/**
+ * Get the current cycling hue offset based on time
+ * Returns a value 0-1 that continuously cycles
+ */
+export function getCyclingHue(time: number): number {
+  return (time * HUE_CYCLE_SPEED) % 1
 }
 
 /**
@@ -109,8 +124,8 @@ export function getReactiveColor(
   beatIntensity: number, // 0-1
   time: number           // For animation
 ): [number, number, number] {
-  // Animated base hue
-  const timeHue = Math.sin(time * 0.3) * 0.05
+  // Cycling hue offset
+  const cycleHue = getCyclingHue(time)
   
   // Position-based hue variation
   const positionHue = position * palette.hueRange
@@ -118,7 +133,7 @@ export function getReactiveColor(
   // Bass-reactive hue shift
   const bassHue = bass * palette.bassHueShift
   
-  const hue = palette.baseHue + positionHue + bassHue + timeHue
+  const hue = palette.baseHue + positionHue + bassHue + cycleHue
   
   // Saturation increases slightly with bass
   const saturation = palette.saturation + bass * 0.15

@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 interface LaserBeam {
   angle: number
@@ -60,6 +60,9 @@ export const laserArray: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
+    
     // Animate laser beams
     for (let b = 0; b < NUM_BEAMS; b++) {
       const beam = beams[b]
@@ -80,8 +83,8 @@ export const laserArray: VisualizationMode = {
       // Depth pulsing
       beam.z = (b % 3 - 1) * 8 + Math.sin(time * 0.8 + b) * bands.midSmooth * 5
       
-      // Hue shift with music
-      beam.hue = 0.35 + (b / NUM_BEAMS) * 0.25 - bands.bassSmooth * 0.1 + bands.highSmooth * 0.1
+      // Hue with cycling
+      beam.hue = cycleHue + (b / NUM_BEAMS) * 0.25 - bands.bassSmooth * 0.1 + bands.highSmooth * 0.1
     }
 
     for (let i = 0; i < count; i++) {
@@ -103,10 +106,10 @@ export const laserArray: VisualizationMode = {
       const coreFactor = 1 - t * 0.6
       sizes[i] = (1.5 + bands.overallSmooth * 2 + bands.beatIntensity * 2.5) * coreFactor
       
-      // Color gradient along beam
+      // Color gradient along beam with cycling
       const hue = beam.hue + t * 0.08
       const saturation = 0.85 + beam.intensity * 0.1
-      const lightness = 0.4 + beam.intensity * 0.3 + (1 - t) * 0.15
+      const lightness = 0.4 + beam.intensity * 0.25 + (1 - t) * 0.1
       
       const [cr, cg, cb] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = cr * beam.intensity

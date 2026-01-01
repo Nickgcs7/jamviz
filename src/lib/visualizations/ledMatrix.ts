@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 interface Panel {
   x: number
@@ -73,6 +73,9 @@ export const ledMatrix: VisualizationMode = {
     const midWave = bands.midSmooth * 1.1
     const beatPulse = bands.beatIntensity
     
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
+    
     for (let p = 0; p < TOTAL_PANELS; p++) {
       const panel = panels[p]
       const gridX = p % GRID_X
@@ -98,8 +101,8 @@ export const ledMatrix: VisualizationMode = {
         beatPulse * 0.25 +
         diagonalSweep * 0.35
       
-      // Hue shifts with frequency - bass pushes red, treble pushes blue
-      panel.targetHue = 0.92 - bands.bassSmooth * 0.12 + bands.highSmooth * 0.1
+      // Hue shifts with frequency - now with cycling
+      panel.targetHue = cycleHue - bands.bassSmooth * 0.12 + bands.highSmooth * 0.1
       
       // Depth based on brightness
       panel.depth = panel.brightness * 3 + beatPulse * 1.5
@@ -121,9 +124,9 @@ export const ledMatrix: VisualizationMode = {
       
       sizes[i] = 1.8 + panel.brightness * 3.5 + (localIndex === 7 ? bands.beatIntensity * 1.5 : 0)
       
-      // HSL coloring
+      // HSL coloring with cycling
       const saturation = 0.75 + panel.brightness * 0.2
-      const lightness = 0.35 + panel.brightness * 0.4
+      const lightness = 0.35 + panel.brightness * 0.35
       const [r, g, b] = hslToRgb(panel.hue, saturation, lightness)
       colors[i * 3] = r
       colors[i * 3 + 1] = g

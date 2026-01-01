@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 interface Ember {
   x: number
@@ -86,6 +86,9 @@ export const yuleLog: VisualizationMode = {
     const windX = Math.sin(time * 0.5) * 0.3 * (1 + bands.midSmooth)
     const turbulence = bands.highSmooth * 0.4
     const intensity = 0.8 + bands.overallSmooth * 0.6 + bands.beatIntensity * 0.4
+    
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
 
     for (let i = 0; i < MAX_EMBERS && i < count; i++) {
       const ember = embers[i]
@@ -128,12 +131,11 @@ export const yuleLog: VisualizationMode = {
       const lifeFactor = ember.life * ember.life
       sizes[i] = ember.size * lifeFactor * intensity + bands.beatIntensity * 1.5 * lifeFactor
       
-      // Color: hot core (yellow-white) to cooler edges (red-orange)
-      // Life determines temperature: young = hot, old = cool
+      // Color with cycling: hot core (yellow-white) to cooler edges (red-orange)
       const temperature = ember.life
-      const hue = ember.hue + (1 - temperature) * 0.02 // Shift to red as it cools
-      const saturation = 0.85 - temperature * 0.15 // Core is less saturated (whiter)
-      const lightness = 0.35 + temperature * 0.35 + bands.beatIntensity * 0.1
+      const hue = cycleHue + ember.hue + (1 - temperature) * 0.02
+      const saturation = 0.85 - temperature * 0.15
+      const lightness = 0.35 + temperature * 0.3 + bands.beatIntensity * 0.1
       
       const [r, g, b] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = r * lifeFactor + (1 - lifeFactor) * 0.1

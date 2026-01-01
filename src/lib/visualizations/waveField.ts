@@ -47,7 +47,6 @@ export const waveField: VisualizationMode = {
       const oz = originalPositions[i * 3 + 2]
       
       const distFromCenter = Math.sqrt(ox * ox + oz * oz)
-      const normalizedDist = Math.min(1, distFromCenter / 30)
 
       // Layered wave motion
       const wave1 = Math.sin(ox * 0.12 + time * 2.0) * bassHeight

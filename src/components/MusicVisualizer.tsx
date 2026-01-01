@@ -9,7 +9,7 @@ import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { AudioAnalyzer, type AudioBands } from '@/lib/AudioAnalyzer'
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
-import { visualizations, type VisualizationMode } from '@/lib/visualizations'
+import { visualizations, type VisualizationMode, type SceneObjects } from '@/lib/visualizations'
 
 const PARTICLE_COUNT = 10000
 
@@ -43,6 +43,8 @@ interface SceneRefs {
   currentBloom: number
   currentRgbShift: number
   currentAfterimage: number
+  // Custom scene objects for visualizations
+  customSceneObjects: SceneObjects | null
 }
 
 interface MusicVisualizerProps {
@@ -143,6 +145,17 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     const particles = new THREE.Points(geometry, material)
     scene.add(particles)
 
+    // Initialize custom scene objects if visualization supports them
+    let customSceneObjects: SceneObjects | null = null
+    if (currentMode.createSceneObjects) {
+      customSceneObjects = currentMode.createSceneObjects(scene)
+    }
+
+    // Handle hideParticles flag
+    if (currentMode.hideParticles) {
+      particles.visible = false
+    }
+
     sceneRef.current = {
       scene,
       camera,
@@ -163,17 +176,24 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       bloomPass,
       currentBloom: 0.35,
       currentRgbShift: 0.0006,
-      currentAfterimage: 0.6
+      currentAfterimage: 0.6,
+      customSceneObjects
     }
   }, [currentMode])
 
   const updateParticleLayout = useCallback((mode: VisualizationMode) => {
     if (!sceneRef.current) return
 
-    const { particles, originalPositions, targetPositions, targetSizes, targetColors } = sceneRef.current
+    const { scene, particles, originalPositions, targetPositions, targetSizes, targetColors, customSceneObjects } = sceneRef.current
     const positions = particles.geometry.attributes.position.array as Float32Array
     const colors = particles.geometry.attributes.customColor.array as Float32Array
     const sizes = particles.geometry.attributes.size.array as Float32Array
+
+    // Clean up old custom scene objects
+    if (customSceneObjects) {
+      customSceneObjects.dispose()
+      sceneRef.current.customSceneObjects = null
+    }
 
     mode.initParticles(positions, colors, PARTICLE_COUNT)
 
@@ -186,6 +206,14 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     for (let i = 0; i < sizes.length; i++) {
       targetSizes[i] = sizes[i]
     }
+
+    // Create new custom scene objects if visualization supports them
+    if (mode.createSceneObjects) {
+      sceneRef.current.customSceneObjects = mode.createSceneObjects(scene)
+    }
+
+    // Handle hideParticles flag
+    particles.visible = !mode.hideParticles
 
     particles.geometry.attributes.position.needsUpdate = true
     particles.geometry.attributes.customColor.needsUpdate = true
@@ -204,7 +232,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       if (!sceneRef.current) return
 
       const refs = sceneRef.current
-      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, targetColors, rgbShiftPass, afterimagePass, bloomPass } = refs
+      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, targetColors, rgbShiftPass, afterimagePass, bloomPass, customSceneObjects } = refs
       const positions = particles.geometry.attributes.position.array as Float32Array
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
@@ -232,35 +260,53 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       rgbShiftPass.uniforms['amount'].value = refs.currentRgbShift
       afterimagePass.uniforms['damp'].value = refs.currentAfterimage
 
-      // Run visualization to set targets
-      currentMode.animate(
-        targetPositions,
-        originalPositions,
-        targetSizes,
-        targetColors,
-        PARTICLE_COUNT,
-        bands,
-        time
-      )
-
-      // Ultra-smooth interpolation for positions
-      for (let i = 0; i < positions.length; i++) {
-        positions[i] = lerp(positions[i], targetPositions[i], POSITION_LERP_FACTOR)
-      }
-      
-      // Smooth size transitions
-      for (let i = 0; i < sizes.length; i++) {
-        sizes[i] = lerp(sizes[i], targetSizes[i], SIZE_LERP_FACTOR)
-      }
-      
-      // Very smooth color transitions
-      for (let i = 0; i < colors.length; i++) {
-        colors[i] = lerp(colors[i], targetColors[i], COLOR_LERP_FACTOR)
+      // Update custom scene objects if present
+      if (customSceneObjects) {
+        customSceneObjects.update(bands, time)
       }
 
-      particles.geometry.attributes.position.needsUpdate = true
-      particles.geometry.attributes.size.needsUpdate = true
-      particles.geometry.attributes.customColor.needsUpdate = true
+      // Run visualization to set targets (only if particles are visible)
+      if (particles.visible) {
+        currentMode.animate(
+          targetPositions,
+          originalPositions,
+          targetSizes,
+          targetColors,
+          PARTICLE_COUNT,
+          bands,
+          time
+        )
+
+        // Ultra-smooth interpolation for positions
+        for (let i = 0; i < positions.length; i++) {
+          positions[i] = lerp(positions[i], targetPositions[i], POSITION_LERP_FACTOR)
+        }
+        
+        // Smooth size transitions
+        for (let i = 0; i < sizes.length; i++) {
+          sizes[i] = lerp(sizes[i], targetSizes[i], SIZE_LERP_FACTOR)
+        }
+        
+        // Very smooth color transitions
+        for (let i = 0; i < colors.length; i++) {
+          colors[i] = lerp(colors[i], targetColors[i], COLOR_LERP_FACTOR)
+        }
+
+        particles.geometry.attributes.position.needsUpdate = true
+        particles.geometry.attributes.size.needsUpdate = true
+        particles.geometry.attributes.customColor.needsUpdate = true
+      } else {
+        // Still run animate for visualizations that use it for state management
+        currentMode.animate(
+          targetPositions,
+          originalPositions,
+          targetSizes,
+          targetColors,
+          PARTICLE_COUNT,
+          bands,
+          time
+        )
+      }
 
       // Smooth camera movement with depth
       const targetCameraX = Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3
@@ -276,15 +322,17 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       camera.position.z = refs.currentCameraZ
       camera.lookAt(0, 0, 0)
 
-      // Smooth rotation
-      const targetRotationSpeed = 0.0003 + bands.overallSmooth * 0.008 + bands.beatIntensity * 0.004
-      refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
-      
-      particles.rotation.y += refs.currentRotationSpeed
-      
-      const targetRotationX = bands.midSmooth * 0.1
-      refs.currentRotationX = lerp(refs.currentRotationX, targetRotationX, ROTATION_LERP_FACTOR)
-      particles.rotation.x = refs.currentRotationX
+      // Smooth rotation (only for particle-based visualizations)
+      if (particles.visible && !currentMode.hideParticles) {
+        const targetRotationSpeed = 0.0003 + bands.overallSmooth * 0.008 + bands.beatIntensity * 0.004
+        refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
+        
+        particles.rotation.y += refs.currentRotationSpeed
+        
+        const targetRotationX = bands.midSmooth * 0.1
+        refs.currentRotationX = lerp(refs.currentRotationX, targetRotationX, ROTATION_LERP_FACTOR)
+        particles.rotation.x = refs.currentRotationX
+      }
 
       composer.render()
     }
@@ -318,9 +366,15 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('keydown', handleKeyPress)
-      if (sceneRef.current && containerRef.current) {
-        sceneRef.current.renderer.dispose()
-        containerRef.current.removeChild(sceneRef.current.renderer.domElement)
+      if (sceneRef.current) {
+        // Clean up custom scene objects
+        if (sceneRef.current.customSceneObjects) {
+          sceneRef.current.customSceneObjects.dispose()
+        }
+        if (containerRef.current) {
+          sceneRef.current.renderer.dispose()
+          containerRef.current.removeChild(sceneRef.current.renderer.domElement)
+        }
         sceneRef.current = null
       }
     }

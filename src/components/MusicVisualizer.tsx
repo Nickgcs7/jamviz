@@ -12,10 +12,14 @@ import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode } from '@/lib/visualizations'
 
 const PARTICLE_COUNT = 10000
-const POSITION_LERP_FACTOR = 0.45
-const SIZE_LERP_FACTOR = 0.55
-const CAMERA_LERP_FACTOR = 0.08
-const ROTATION_LERP_FACTOR = 0.15
+
+// Fine-tuned lerp factors for ultra-smooth motion
+const POSITION_LERP_FACTOR = 0.12      // Slower position interpolation
+const SIZE_LERP_FACTOR = 0.15          // Slower size changes
+const COLOR_LERP_FACTOR = 0.08         // Very smooth color transitions
+const CAMERA_LERP_FACTOR = 0.04        // Gentle camera movement
+const ROTATION_LERP_FACTOR = 0.06      // Smooth rotation
+const POST_PROCESS_LERP = 0.1          // Smooth post-processing changes
 
 interface SceneRefs {
   scene: THREE.Scene
@@ -26,12 +30,19 @@ interface SceneRefs {
   originalPositions: Float32Array
   targetPositions: Float32Array
   targetSizes: Float32Array
+  targetColors: Float32Array
   currentCameraX: number
   currentCameraY: number
+  currentCameraZ: number
   currentRotationSpeed: number
+  currentRotationX: number
   afterimagePass: AfterimagePass
   rgbShiftPass: ShaderPass
   bloomPass: UnrealBloomPass
+  // Smooth post-processing values
+  currentBloom: number
+  currentRgbShift: number
+  currentAfterimage: number
 }
 
 interface MusicVisualizerProps {
@@ -60,6 +71,9 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x010103)
+    
+    // Add subtle fog for depth
+    scene.fog = new THREE.FogExp2(0x010103, 0.008)
 
     const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000)
     camera.position.z = 50
@@ -68,35 +82,38 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 0.75
+    renderer.toneMappingExposure = 0.85
     containerRef.current.appendChild(renderer.domElement)
 
-    // Post-processing
+    // Enhanced post-processing pipeline
     const composer = new EffectComposer(renderer)
     
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
-    const afterimagePass = new AfterimagePass(0.55)
+    // Increased afterimage for smoother trails
+    const afterimagePass = new AfterimagePass(0.65)
     composer.addPass(afterimagePass)
 
+    // Tuned bloom for rich glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.5,
-      0.3,
-      0.5
+      0.6,    // strength
+      0.4,    // radius  
+      0.4     // threshold
     )
     composer.addPass(bloomPass)
 
+    // Subtle RGB shift for depth perception
     const rgbShiftPass = new ShaderPass(RGBShiftShader)
-    rgbShiftPass.uniforms['amount'].value = 0.001
+    rgbShiftPass.uniforms['amount'].value = 0.0008
     rgbShiftPass.uniforms['angle'].value = 0.0
     composer.addPass(rgbShiftPass)
 
     const outputPass = new OutputPass()
     composer.addPass(outputPass)
 
-    // Particle geometry
+    // Particle geometry with enhanced attributes
     const geometry = new THREE.BufferGeometry()
     const positions = new Float32Array(PARTICLE_COUNT * 3)
     const colors = new Float32Array(PARTICLE_COUNT * 3)
@@ -135,19 +152,25 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       originalPositions: positions.slice(),
       targetPositions: positions.slice(),
       targetSizes: sizes.slice(),
+      targetColors: colors.slice(),
       currentCameraX: 0,
       currentCameraY: 0,
+      currentCameraZ: 50,
       currentRotationSpeed: 0.001,
+      currentRotationX: 0,
       afterimagePass,
       rgbShiftPass,
-      bloomPass
+      bloomPass,
+      currentBloom: 0.6,
+      currentRgbShift: 0.0008,
+      currentAfterimage: 0.65
     }
   }, [currentMode])
 
   const updateParticleLayout = useCallback((mode: VisualizationMode) => {
     if (!sceneRef.current) return
 
-    const { particles, originalPositions, targetPositions, targetSizes } = sceneRef.current
+    const { particles, originalPositions, targetPositions, targetSizes, targetColors } = sceneRef.current
     const positions = particles.geometry.attributes.position.array as Float32Array
     const colors = particles.geometry.attributes.customColor.array as Float32Array
     const sizes = particles.geometry.attributes.size.array as Float32Array
@@ -157,6 +180,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     for (let i = 0; i < positions.length; i++) {
       originalPositions[i] = positions[i]
       targetPositions[i] = positions[i]
+      targetColors[i] = colors[i]
     }
     
     for (let i = 0; i < sizes.length; i++) {
@@ -180,7 +204,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       if (!sceneRef.current) return
 
       const refs = sceneRef.current
-      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, rgbShiftPass, afterimagePass, bloomPass } = refs
+      const { camera, composer, particles, originalPositions, targetPositions, targetSizes, targetColors, rgbShiftPass, afterimagePass, bloomPass } = refs
       const positions = particles.geometry.attributes.position.array as Float32Array
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
@@ -195,49 +219,72 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         bands = analyzerRef.current.getBands()
       }
 
-      // Dynamic post-processing - reduced beat intensity effects
-      rgbShiftPass.uniforms['amount'].value = 0.0006 + bands.overallSmooth * 0.003 + bands.beatIntensity * 0.003  // Reduced from 0.006
-      afterimagePass.uniforms['damp'].value = 0.5 + bands.overallSmooth * 0.25
-      bloomPass.strength = 0.4 + bands.beatIntensity * 0.5 + bands.bassSmooth * 0.3  // Reduced from 0.8 and 0.4
+      // Smoothed dynamic post-processing
+      const targetBloom = 0.5 + bands.beatIntensity * 0.4 + bands.bassSmooth * 0.3
+      const targetRgbShift = 0.0005 + bands.overallSmooth * 0.002 + bands.beatIntensity * 0.002
+      const targetAfterimage = 0.55 + bands.overallSmooth * 0.2
+      
+      refs.currentBloom = lerp(refs.currentBloom, targetBloom, POST_PROCESS_LERP)
+      refs.currentRgbShift = lerp(refs.currentRgbShift, targetRgbShift, POST_PROCESS_LERP)
+      refs.currentAfterimage = lerp(refs.currentAfterimage, targetAfterimage, POST_PROCESS_LERP)
+      
+      bloomPass.strength = refs.currentBloom
+      rgbShiftPass.uniforms['amount'].value = refs.currentRgbShift
+      afterimagePass.uniforms['damp'].value = refs.currentAfterimage
 
-      // Run visualization
+      // Run visualization to set targets
       currentMode.animate(
         targetPositions,
         originalPositions,
         targetSizes,
-        colors,
+        targetColors,
         PARTICLE_COUNT,
         bands,
         time
       )
 
-      // Interpolate positions
+      // Ultra-smooth interpolation for positions
       for (let i = 0; i < positions.length; i++) {
         positions[i] = lerp(positions[i], targetPositions[i], POSITION_LERP_FACTOR)
       }
       
+      // Smooth size transitions
       for (let i = 0; i < sizes.length; i++) {
         sizes[i] = lerp(sizes[i], targetSizes[i], SIZE_LERP_FACTOR)
+      }
+      
+      // Very smooth color transitions
+      for (let i = 0; i < colors.length; i++) {
+        colors[i] = lerp(colors[i], targetColors[i], COLOR_LERP_FACTOR)
       }
 
       particles.geometry.attributes.position.needsUpdate = true
       particles.geometry.attributes.size.needsUpdate = true
       particles.geometry.attributes.customColor.needsUpdate = true
 
-      // Camera movement
-      const targetCameraX = Math.sin(time * 0.1) * 5 + bands.midSmooth * 8 + bands.beatIntensity * 4  // Reduced from 6
-      const targetCameraY = Math.cos(time * 0.12) * 3 + bands.highSmooth * 5
+      // Smooth camera movement with depth
+      const targetCameraX = Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3
+      const targetCameraY = Math.cos(time * 0.1) * 4 + bands.highSmooth * 4
+      const targetCameraZ = 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
+      
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
+      refs.currentCameraZ = lerp(refs.currentCameraZ, targetCameraZ, CAMERA_LERP_FACTOR)
+      
       camera.position.x = refs.currentCameraX
       camera.position.y = refs.currentCameraY
+      camera.position.z = refs.currentCameraZ
       camera.lookAt(0, 0, 0)
 
-      // Rotation
-      const targetRotationSpeed = 0.0004 + bands.overallSmooth * 0.01 + bands.beatIntensity * 0.005  // Reduced from 0.008
+      // Smooth rotation
+      const targetRotationSpeed = 0.0003 + bands.overallSmooth * 0.008 + bands.beatIntensity * 0.004
       refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
+      
       particles.rotation.y += refs.currentRotationSpeed
-      particles.rotation.x += refs.currentRotationSpeed * 0.15
+      
+      const targetRotationX = bands.midSmooth * 0.1
+      refs.currentRotationX = lerp(refs.currentRotationX, targetRotationX, ROTATION_LERP_FACTOR)
+      particles.rotation.x = refs.currentRotationX
 
       composer.render()
     }

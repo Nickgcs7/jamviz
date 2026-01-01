@@ -266,7 +266,6 @@ export const laserArray: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
-    const cycleHue = getCyclingHue(time)
     const dt = 0.016
     
     // Animate trail particles along beams

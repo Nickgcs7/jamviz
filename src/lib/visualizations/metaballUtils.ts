@@ -4,7 +4,6 @@
  */
 
 import * as THREE from 'three'
-import type { AudioBands } from '../AudioAnalyzer'
 import { getCyclingHue } from '../colorUtils'
 
 // Metaball vertex shader - simple fullscreen quad

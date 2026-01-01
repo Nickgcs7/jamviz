@@ -152,13 +152,13 @@ export const lavaLamp: VisualizationMode = {
   },
 
   animate(
-    positions: Float32Array,
-    originalPositions: Float32Array,
+    _positions: Float32Array,
+    _originalPositions: Float32Array,
     sizes: Float32Array,
-    colors: Float32Array,
+    _colors: Float32Array,
     count: number,
-    bands: AudioBands,
-    time: number
+    _bands: AudioBands,
+    _time: number
   ) {
     // Main rendering is done in createSceneObjects.update
     // Keep particles hidden

@@ -1,10 +1,11 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
+import { hslToRgb } from '../colorUtils'
 
 export const explosion: VisualizationMode = {
   id: 'explosion',
   name: 'Supernova',
-  description: 'Explosive bass-driven energy sphere',
+  description: 'Explosive bass-driven energy sphere with depth layers',
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     for (let i = 0; i < count; i++) {
@@ -15,10 +16,12 @@ export const explosion: VisualizationMode = {
       positions[i * 3 + 1] = Math.sin(phi) * Math.sin(theta)
       positions[i * 3 + 2] = Math.cos(phi)
 
-      const r = Math.random()
-      colors[i * 3] = 1.0
-      colors[i * 3 + 1] = 0.6 + r * 0.4
-      colors[i * 3 + 2] = 0.2 + r * 0.3
+      // Warm gradient from center
+      const t = Math.random()
+      const [r, g, b] = hslToRgb(0.08 - t * 0.06, 0.9, 0.55 + t * 0.15)
+      colors[i * 3] = r
+      colors[i * 3 + 1] = g
+      colors[i * 3 + 2] = b
     }
   },
 
@@ -32,10 +35,10 @@ export const explosion: VisualizationMode = {
     time: number
   ) {
     const baseRadius = 8
-    const bassExpand = bands.bassSmooth * 25
-    const breathe = Math.sin(time * 2) * 3
-    const beatBurst = bands.beatIntensity * 20
-    const midPulse = bands.midSmooth * 8
+    const bassExpand = bands.bassSmooth * 22
+    const breathe = Math.sin(time * 1.5) * 3
+    const beatBurst = bands.beatIntensity * 15
+    const midPulse = bands.midSmooth * 7
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
@@ -43,17 +46,21 @@ export const explosion: VisualizationMode = {
       const oz = originalPositions[i * 3 + 2]
 
       const phase = i * 0.001
-      const individualPulse = Math.sin(time * 3 + phase * 10) * 2
-      const individualBeat = bands.isBeat ? Math.sin(phase * 50) * 5 : 0
+      const individualPulse = Math.sin(time * 2.5 + phase * 10) * 2
+      const individualBeat = bands.isBeat ? Math.sin(phase * 50) * 4 : 0
       
       const radius = baseRadius + bassExpand + breathe + midPulse + individualPulse + beatBurst + individualBeat
 
+      // Add depth layers based on frequency
+      const depthOffset = bands.midSmooth * 5 * Math.sin(phase * 20 + time * 2)
+
       let px = ox * radius
       let py = oy * radius
-      let pz = oz * radius
+      let pz = oz * radius + depthOffset
 
-      const spikeAmount = bands.highSmooth * 8
-      const spike = Math.sin(phase * 100 + time * 5) * spikeAmount
+      // High frequency spikes
+      const spikeAmount = bands.highSmooth * 6
+      const spike = Math.sin(phase * 100 + time * 4) * spikeAmount
       px += ox * spike
       py += oy * spike
       pz += oz * spike
@@ -63,14 +70,18 @@ export const explosion: VisualizationMode = {
       positions[i * 3 + 2] = pz
       
       const distFromCenter = Math.sqrt(px*px + py*py + pz*pz) / radius
-      sizes[i] = 1.5 + bands.bassSmooth * 5 + bands.beatIntensity * 6 + (1 - distFromCenter) * 3
+      sizes[i] = 1.2 + bands.bassSmooth * 4 + bands.beatIntensity * 5 + (1 - distFromCenter) * 2.5
       
-      const energyBoost = bands.bassSmooth + bands.beatIntensity
-      const coreHeat = Math.max(0, 1 - distFromCenter * 1.5)
+      // Dynamic color: core is hot yellow, outer is orange-red, bass shifts to magenta
+      const coreHeat = Math.max(0, 1 - distFromCenter * 1.4)
+      const hue = 0.08 - coreHeat * 0.04 + bands.bassSmooth * 0.08 // Shift toward pink/magenta with bass
+      const saturation = 0.85 + bands.beatIntensity * 0.1
+      const lightness = 0.45 + coreHeat * 0.35 + bands.beatIntensity * 0.1
       
-      colors[i * 3] = 1.0
-      colors[i * 3 + 1] = 0.3 + coreHeat * 0.7 + energyBoost * 0.3
-      colors[i * 3 + 2] = 0.1 + coreHeat * 0.6 + bands.beatIntensity * 0.4
+      const [r, g, b] = hslToRgb(hue, saturation, lightness)
+      colors[i * 3] = r
+      colors[i * 3 + 1] = g
+      colors[i * 3 + 2] = b
     }
   }
 }

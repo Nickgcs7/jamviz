@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 export const explosion: VisualizationMode = {
   id: 'explosion',
@@ -39,6 +39,9 @@ export const explosion: VisualizationMode = {
     const breathe = Math.sin(time * 1.5) * 3
     const beatBurst = bands.beatIntensity * 15
     const midPulse = bands.midSmooth * 7
+    
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
 
     for (let i = 0; i < count; i++) {
       const ox = originalPositions[i * 3]
@@ -72,11 +75,11 @@ export const explosion: VisualizationMode = {
       const distFromCenter = Math.sqrt(px*px + py*py + pz*pz) / radius
       sizes[i] = 1.2 + bands.bassSmooth * 4 + bands.beatIntensity * 5 + (1 - distFromCenter) * 2.5
       
-      // Dynamic color: core is hot yellow, outer is orange-red, bass shifts to magenta
+      // Dynamic color with cycling: core is hot, outer is cooler
       const coreHeat = Math.max(0, 1 - distFromCenter * 1.4)
-      const hue = 0.08 - coreHeat * 0.04 + bands.bassSmooth * 0.08 // Shift toward pink/magenta with bass
+      const hue = cycleHue + coreHeat * 0.1 + bands.bassSmooth * 0.08
       const saturation = 0.85 + bands.beatIntensity * 0.1
-      const lightness = 0.45 + coreHeat * 0.35 + bands.beatIntensity * 0.1
+      const lightness = 0.4 + coreHeat * 0.3 + bands.beatIntensity * 0.1
       
       const [r, g, b] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = r

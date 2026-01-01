@@ -1,6 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb } from '../colorUtils'
+import { hslToRgb, getCyclingHue } from '../colorUtils'
 
 interface Blob {
   x: number
@@ -61,6 +61,9 @@ export const lavaLamp: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
+    // Get cycling hue offset
+    const cycleHue = getCyclingHue(time)
+    
     // Animate blobs with more depth movement
     for (let b = 0; b < NUM_BLOBS; b++) {
       const blob = blobs[b]
@@ -121,12 +124,12 @@ export const lavaLamp: VisualizationMode = {
       const blobSize = inBlob ? 3.5 + totalInfluence * 5 : 1.3
       sizes[i] = blobSize + bands.overallSmooth * 2.5 + bands.beatIntensity * 2
 
-      // Rich purple-magenta-pink color space
+      // Color cycling with blob influence
       const heat = Math.min(1, totalInfluence * 1.3)
       const normalizedHue = totalInfluence > 0 ? dominantBlobHue / totalInfluence : 0
-      const hue = 0.82 + normalizedHue + heat * 0.08 - bands.bassSmooth * 0.05
+      const hue = cycleHue + normalizedHue + heat * 0.08 - bands.bassSmooth * 0.05
       const saturation = 0.7 + heat * 0.2 + bands.beatIntensity * 0.1
-      const lightness = 0.4 + heat * 0.25 + bands.beatIntensity * 0.1
+      const lightness = 0.4 + heat * 0.2 + bands.beatIntensity * 0.1
       
       const [r, g, b] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = r

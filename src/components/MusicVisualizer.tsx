@@ -61,6 +61,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const [currentMode, setCurrentMode] = useState<VisualizationMode>(visualizations[0])
   const [showUI, setShowUI] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [ledText, setLedText] = useState('JAMVIZ')
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
   const sceneRef = useRef<SceneRefs | null>(null)
   const animationRef = useRef<number>(0)
@@ -309,9 +310,13 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       }
 
       // Smooth camera movement with depth
-      const targetCameraX = Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3
-      const targetCameraY = Math.cos(time * 0.1) * 4 + bands.highSmooth * 4
-      const targetCameraZ = 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
+      // LED Matrix gets reduced camera motion to keep text readable
+      const isLedMatrix = currentMode.id === 'led_matrix'
+      const cameraIntensity = isLedMatrix ? 0.3 : 1.0
+      
+      const targetCameraX = (Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3) * cameraIntensity
+      const targetCameraY = (Math.cos(time * 0.1) * 4 + bands.highSmooth * 4) * cameraIntensity
+      const targetCameraZ = isLedMatrix ? 55 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
       
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
@@ -322,8 +327,8 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       camera.position.z = refs.currentCameraZ
       camera.lookAt(0, 0, 0)
 
-      // Smooth rotation (only for particle-based visualizations)
-      if (particles.visible && !currentMode.hideParticles) {
+      // Smooth rotation (only for particle-based visualizations, skip for LED Matrix)
+      if (particles.visible && !currentMode.hideParticles && !isLedMatrix) {
         const targetRotationSpeed = 0.0003 + bands.overallSmooth * 0.008 + bands.beatIntensity * 0.004
         refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
         
@@ -332,6 +337,11 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         const targetRotationX = bands.midSmooth * 0.1
         refs.currentRotationX = lerp(refs.currentRotationX, targetRotationX, ROTATION_LERP_FACTOR)
         particles.rotation.x = refs.currentRotationX
+      } else if (isLedMatrix) {
+        // Keep LED Matrix flat
+        particles.rotation.x = 0
+        particles.rotation.y = 0
+        particles.rotation.z = 0
       }
 
       composer.render()
@@ -350,6 +360,9 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     }
 
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts if typing in text input
+      if (e.target instanceof HTMLInputElement) return
+      
       if (e.key === 'h' || e.key === 'H') setShowUI(prev => !prev)
       const num = parseInt(e.key)
       if (num >= 1 && num <= visualizations.length) {
@@ -386,10 +399,26 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     return () => stopAudio()
   }, [])
 
+  // Update LED text when it changes
+  useEffect(() => {
+    if (currentMode.setText) {
+      currentMode.setText(ledText)
+    }
+  }, [ledText, currentMode])
+
   const handleModeChange = useCallback((mode: VisualizationMode) => {
     setCurrentMode(mode)
     updateParticleLayout(mode)
-  }, [updateParticleLayout])
+    // Initialize text if switching to LED Matrix
+    if (mode.setText) {
+      mode.setText(ledText)
+    }
+  }, [updateParticleLayout, ledText])
+
+  const handleTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newText = e.target.value
+    setLedText(newText)
+  }, [])
 
   const startMic = async () => {
     try {
@@ -432,6 +461,26 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
             <span className="text-white/60 text-sm">Microphone</span>
           </div>
         </div>
+
+        {/* LED Matrix Text Input */}
+        {currentMode.textConfig?.enabled && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-black/60 border border-white/20 backdrop-blur-sm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+              <input
+                type="text"
+                value={ledText}
+                onChange={handleTextChange}
+                placeholder={currentMode.textConfig.placeholder}
+                className="bg-transparent border-none outline-none text-white text-sm w-48 placeholder-white/30"
+                maxLength={50}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="absolute bottom-4 left-4 pointer-events-auto">
           <div className="flex flex-col gap-1">

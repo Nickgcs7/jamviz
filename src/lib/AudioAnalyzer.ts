@@ -18,29 +18,37 @@ export class AudioAnalyzer {
   source: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null
   private stream: MediaStream | null = null
 
-  // Smoothed values
+  // Double-smoothed values for ultra-smooth output
   private smoothBass = 0
   private smoothMid = 0
   private smoothHigh = 0
   private smoothOverall = 0
+  
+  // Secondary smoothing layer
+  private smoothBass2 = 0
+  private smoothMid2 = 0
+  private smoothHigh2 = 0
+  private smoothOverall2 = 0
 
-  // Beat detection - tuned for smoother response
+  // Beat detection - tuned for smooth, accurate response
   private lastBeatTime = 0
-  private beatCooldown = 180 // ms - prevent rapid-fire beats
+  private beatCooldown = 200 // ms - prevent rapid-fire beats
   private energyHistory: number[] = []
-  private historySize = 20 // Slightly longer history for stability
+  private historySize = 24 // Longer history for stability
   private currentBeatIntensity = 0
+  private smoothedBeatIntensity = 0
 
-  // Smoothing factors
-  private smoothingFactorUp = 0.5     // Fast but not jarring attack
-  private smoothingFactorDown = 0.2   // Gentle release
+  // Smoothing factors - asymmetric for musical feel
+  private smoothingFactorUp = 0.4       // Quick but not jarring attack
+  private smoothingFactorDown = 0.15    // Very gentle release
+  private secondarySmoothFactor = 0.25  // Extra smoothing layer
 
   async initMic(): Promise<void> {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     this.audioContext = new AudioContext()
     this.analyser = this.audioContext.createAnalyser()
     this.analyser.fftSize = 512
-    this.analyser.smoothingTimeConstant = 0.4 // Smoother FFT response
+    this.analyser.smoothingTimeConstant = 0.5 // Smoother FFT response
     this.source = this.audioContext.createMediaStreamSource(this.stream)
     this.source.connect(this.analyser)
     this.dataArray = new Uint8Array(this.analyser.frequencyBinCount)
@@ -50,7 +58,7 @@ export class AudioAnalyzer {
     this.audioContext = new AudioContext()
     this.analyser = this.audioContext.createAnalyser()
     this.analyser.fftSize = 512
-    this.analyser.smoothingTimeConstant = 0.4 // Smoother FFT response
+    this.analyser.smoothingTimeConstant = 0.5 // Smoother FFT response
     this.source = this.audioContext.createMediaElementSource(audioElement)
     this.source.connect(this.analyser)
     this.analyser.connect(this.audioContext.destination)
@@ -87,7 +95,7 @@ export class AudioAnalyzer {
     const rawHigh = this.getAverageFrequency(50, 140)    // Highs
     const rawOverall = this.getAverageFrequency(0, 140)
 
-    // Apply asymmetric smoothing
+    // First layer: asymmetric smoothing (fast attack, slow release)
     const bassUp = rawBass > this.smoothBass
     const midUp = rawMid > this.smoothMid
     const highUp = rawHigh > this.smoothHigh
@@ -106,16 +114,22 @@ export class AudioAnalyzer {
     this.smoothHigh = this.lerp(
       this.smoothHigh, 
       rawHigh, 
-      highUp ? this.smoothingFactorUp * 0.8 : this.smoothingFactorDown * 0.7
+      highUp ? this.smoothingFactorUp * 0.8 : this.smoothingFactorDown * 0.6
     )
     this.smoothOverall = this.lerp(
       this.smoothOverall, 
       rawOverall, 
       overallUp ? this.smoothingFactorUp : this.smoothingFactorDown
     )
+    
+    // Second layer: uniform smoothing for extra silkiness
+    this.smoothBass2 = this.lerp(this.smoothBass2, this.smoothBass, this.secondarySmoothFactor)
+    this.smoothMid2 = this.lerp(this.smoothMid2, this.smoothMid, this.secondarySmoothFactor)
+    this.smoothHigh2 = this.lerp(this.smoothHigh2, this.smoothHigh, this.secondarySmoothFactor)
+    this.smoothOverall2 = this.lerp(this.smoothOverall2, this.smoothOverall, this.secondarySmoothFactor)
 
     // Beat detection - balanced sensitivity
-    const currentEnergy = rawBass * 2.0 + rawMid * 0.6
+    const currentEnergy = rawBass * 1.8 + rawMid * 0.5
     this.energyHistory.push(currentEnergy)
     if (this.energyHistory.length > this.historySize) {
       this.energyHistory.shift()
@@ -123,36 +137,43 @@ export class AudioAnalyzer {
 
     const averageEnergy = this.energyHistory.reduce((a, b) => a + b, 0) / this.energyHistory.length
     const energyVariance = this.energyHistory.reduce((sum, e) => sum + Math.pow(e - averageEnergy, 2), 0) / this.energyHistory.length
-    const dynamicThreshold = averageEnergy + Math.sqrt(energyVariance) * 1.2 // Slightly less sensitive
+    const dynamicThreshold = averageEnergy + Math.sqrt(energyVariance) * 1.3
 
     const now = performance.now()
     let isBeat = false
 
     if (
       currentEnergy > dynamicThreshold &&
-      currentEnergy > 0.18 && // Higher minimum threshold
+      currentEnergy > 0.2 && // Higher minimum threshold
       now - this.lastBeatTime > this.beatCooldown
     ) {
       isBeat = true
       this.lastBeatTime = now
       // Cap the beat intensity for smoother visuals
-      this.currentBeatIntensity = Math.min(0.85, (currentEnergy - averageEnergy) / 0.25)
+      this.currentBeatIntensity = Math.min(0.8, (currentEnergy - averageEnergy) / 0.3)
     }
 
-    // Slower beat decay for smoother transitions
-    this.currentBeatIntensity *= 0.82
+    // Very smooth beat decay
+    this.currentBeatIntensity *= 0.88
+    
+    // Additional smoothing on beat intensity
+    this.smoothedBeatIntensity = this.lerp(
+      this.smoothedBeatIntensity,
+      this.currentBeatIntensity,
+      0.3
+    )
 
     return {
       bass: rawBass,
       mid: rawMid,
       high: rawHigh,
       overall: rawOverall,
-      bassSmooth: this.smoothBass,
-      midSmooth: this.smoothMid,
-      highSmooth: this.smoothHigh,
-      overallSmooth: this.smoothOverall,
+      bassSmooth: this.smoothBass2,
+      midSmooth: this.smoothMid2,
+      highSmooth: this.smoothHigh2,
+      overallSmooth: this.smoothOverall2,
       isBeat,
-      beatIntensity: this.currentBeatIntensity
+      beatIntensity: this.smoothedBeatIntensity
     }
   }
 
@@ -171,12 +192,17 @@ export class AudioAnalyzer {
     }
     this.analyser = null
     
-    // Reset state
+    // Reset all state
     this.smoothBass = 0
     this.smoothMid = 0
     this.smoothHigh = 0
     this.smoothOverall = 0
+    this.smoothBass2 = 0
+    this.smoothMid2 = 0
+    this.smoothHigh2 = 0
+    this.smoothOverall2 = 0
     this.energyHistory = []
     this.currentBeatIntensity = 0
+    this.smoothedBeatIntensity = 0
   }
 }

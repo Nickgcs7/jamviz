@@ -82,31 +82,31 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 0.85
+    renderer.toneMappingExposure = 0.8  // Slightly reduced exposure
     containerRef.current.appendChild(renderer.domElement)
 
-    // Enhanced post-processing pipeline
+    // Post-processing pipeline with reduced bloom
     const composer = new EffectComposer(renderer)
     
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
-    // Increased afterimage for smoother trails
-    const afterimagePass = new AfterimagePass(0.65)
+    // Afterimage for smooth trails
+    const afterimagePass = new AfterimagePass(0.6)
     composer.addPass(afterimagePass)
 
-    // Tuned bloom for rich glow
+    // Reduced bloom for less glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.6,    // strength
-      0.4,    // radius  
-      0.4     // threshold
+      0.35,   // strength - reduced from 0.6
+      0.3,    // radius  
+      0.6     // threshold - raised to reduce glow on dimmer particles
     )
     composer.addPass(bloomPass)
 
     // Subtle RGB shift for depth perception
     const rgbShiftPass = new ShaderPass(RGBShiftShader)
-    rgbShiftPass.uniforms['amount'].value = 0.0008
+    rgbShiftPass.uniforms['amount'].value = 0.0006
     rgbShiftPass.uniforms['angle'].value = 0.0
     composer.addPass(rgbShiftPass)
 
@@ -161,9 +161,9 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       afterimagePass,
       rgbShiftPass,
       bloomPass,
-      currentBloom: 0.6,
-      currentRgbShift: 0.0008,
-      currentAfterimage: 0.65
+      currentBloom: 0.35,
+      currentRgbShift: 0.0006,
+      currentAfterimage: 0.6
     }
   }, [currentMode])
 
@@ -219,10 +219,10 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         bands = analyzerRef.current.getBands()
       }
 
-      // Smoothed dynamic post-processing
-      const targetBloom = 0.5 + bands.beatIntensity * 0.4 + bands.bassSmooth * 0.3
-      const targetRgbShift = 0.0005 + bands.overallSmooth * 0.002 + bands.beatIntensity * 0.002
-      const targetAfterimage = 0.55 + bands.overallSmooth * 0.2
+      // Reduced dynamic post-processing
+      const targetBloom = 0.3 + bands.beatIntensity * 0.2 + bands.bassSmooth * 0.15
+      const targetRgbShift = 0.0004 + bands.overallSmooth * 0.001 + bands.beatIntensity * 0.001
+      const targetAfterimage = 0.55 + bands.overallSmooth * 0.15
       
       refs.currentBloom = lerp(refs.currentBloom, targetBloom, POST_PROCESS_LERP)
       refs.currentRgbShift = lerp(refs.currentRgbShift, targetRgbShift, POST_PROCESS_LERP)

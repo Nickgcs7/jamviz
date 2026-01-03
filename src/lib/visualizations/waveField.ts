@@ -99,7 +99,7 @@ function updateSpring(
   target: number,
   springStrength: number = 0.05,
   damping: number = 0.85,
-  dt: number = 0.016
+  _dt: number = 0.016
 ): number {
   // Spring physics for smooth, weighted motion
   const force = (target - state.position) * springStrength

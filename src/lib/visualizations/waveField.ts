@@ -1,13 +1,29 @@
 import type { VisualizationMode, SceneObjects } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 import { hslToRgb, getCyclingHue } from '../colorUtils'
+import { builtInGradients, sampleGradient } from '../gradients'
 import * as THREE from 'three'
 
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
 // Grid configuration
-const GRID_WIDTH = 32      // Columns (X axis)
+const GRID_WIDTH = 40      // Columns (X axis) - increased for frequency mapping
 const GRID_DEPTH = 48      // Rows (Z axis) - more depth for perspective
-const CELL_SIZE = 2.5      // Size of each grid cell
+const CELL_SIZE = 2.2      // Size of each grid cell
 const HORIZON_Y = 15       // Vanishing point height
+
+// Audio-reactive perspective
+const BASE_FOV_FACTOR = 1.0
+const MAX_FOV_INCREASE = 0.4  // How much FOV increases with bass
+
+// Visualization modes
+type TerrainMode = 'linear' | 'radial'
+
+// ============================================================================
+// STATE
+// ============================================================================
 
 // Store terrain heights for smooth animation
 const terrainHeights: number[][] = []
@@ -18,7 +34,77 @@ let lineGeometry: THREE.BufferGeometry | null = null
 let lineMaterial: THREE.LineBasicMaterial | null = null
 let lineSegments: THREE.LineSegments | null = null
 
-// Initialize terrain height arrays
+// Configuration state
+let currentMode: TerrainMode = 'linear'
+let currentGradient = builtInGradients.synthwave
+
+// Perspective state (smoothed)
+let currentPerspectiveFactor = BASE_FOV_FACTOR
+let currentHorizonOffset = 0
+
+// ============================================================================
+// FREQUENCY BAND MAPPING
+// ============================================================================
+
+/**
+ * Maps grid columns to frequency bands
+ * Creates a more musical visualization where left = low freq, right = high freq
+ */
+function getFrequencyForColumn(col: number, bands: AudioBands): number {
+  const normalizedCol = col / (GRID_WIDTH - 1)  // 0-1
+  
+  // Map columns to 7 frequency bands with smooth interpolation
+  // Left side: sub-bass/bass, Center: mids, Right side: highs
+  
+  if (normalizedCol < 0.1) {
+    // Sub-bass (leftmost 10%)
+    return bands.subBassSmooth * 1.3
+  } else if (normalizedCol < 0.25) {
+    // Bass (10-25%)
+    const t = (normalizedCol - 0.1) / 0.15
+    return bands.subBassSmooth * (1 - t) + bands.bassSmooth * t
+  } else if (normalizedCol < 0.4) {
+    // Low-mid (25-40%)
+    const t = (normalizedCol - 0.25) / 0.15
+    return bands.bassSmooth * (1 - t) + bands.lowMidSmooth * t
+  } else if (normalizedCol < 0.55) {
+    // Mid (40-55%)
+    const t = (normalizedCol - 0.4) / 0.15
+    return bands.lowMidSmooth * (1 - t) + bands.midSmooth * t
+  } else if (normalizedCol < 0.7) {
+    // High-mid (55-70%)
+    const t = (normalizedCol - 0.55) / 0.15
+    return bands.midSmooth * (1 - t) + bands.highMidSmooth * t
+  } else if (normalizedCol < 0.85) {
+    // Treble (70-85%)
+    const t = (normalizedCol - 0.7) / 0.15
+    return bands.highMidSmooth * (1 - t) + bands.trebleSmooth * t
+  } else {
+    // Brilliance (rightmost 15%)
+    const t = (normalizedCol - 0.85) / 0.15
+    return bands.trebleSmooth * (1 - t) + bands.brillianceSmooth * t
+  }
+}
+
+/**
+ * Get frequency band index for a column (for gradient coloring)
+ */
+function getFrequencyBandIndex(col: number): number {
+  const normalizedCol = col / (GRID_WIDTH - 1)
+  
+  if (normalizedCol < 0.15) return 0       // Sub-bass
+  if (normalizedCol < 0.3) return 1        // Bass
+  if (normalizedCol < 0.45) return 2       // Low-mid
+  if (normalizedCol < 0.55) return 3       // Mid
+  if (normalizedCol < 0.7) return 4        // High-mid
+  if (normalizedCol < 0.85) return 5       // Treble
+  return 6                                  // Brilliance
+}
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
 function initTerrain() {
   terrainHeights.length = 0
   targetHeights.length = 0
@@ -33,30 +119,62 @@ function initTerrain() {
   }
 }
 
-// Calculate perspective Y position (creates vanishing point effect)
-function getPerspectiveY(baseY: number, z: number, depth: number): number {
-  // Further back = closer to horizon
-  const perspectiveFactor = z / depth
-  const perspective = Math.pow(perspectiveFactor, 1.5)
-  return baseY + (HORIZON_Y - baseY) * perspective
+// ============================================================================
+// PERSPECTIVE CALCULATIONS
+// ============================================================================
+
+/**
+ * Calculate perspective Y position (creates vanishing point effect)
+ * Now audio-reactive based on overall energy
+ */
+function getPerspectiveY(baseY: number, z: number, depth: number, perspectiveFactor: number): number {
+  const perspectiveProgress = z / depth
+  const perspective = Math.pow(perspectiveProgress, 1.5)
+  const dynamicHorizon = HORIZON_Y + currentHorizonOffset
+  return baseY + (dynamicHorizon - baseY) * perspective * perspectiveFactor
 }
 
-// Calculate perspective X scale (narrower towards horizon)
-function getPerspectiveScale(z: number, depth: number): number {
-  const perspectiveFactor = z / depth
-  return 1 - perspectiveFactor * 0.7
+/**
+ * Calculate perspective X scale (narrower towards horizon)
+ */
+function getPerspectiveScale(z: number, depth: number, perspectiveFactor: number): number {
+  const perspectiveProgress = z / depth
+  return 1 - perspectiveProgress * (0.65 + (perspectiveFactor - 1) * 0.2)
 }
+
+/**
+ * Convert cartesian to polar for radial mode
+ */
+function cartesianToRadial(
+  x: number,
+  z: number,
+  centerX: number,
+  centerZ: number
+): { angle: number; radius: number } {
+  const dx = x - centerX
+  const dz = z - centerZ
+  return {
+    angle: Math.atan2(dz, dx),
+    radius: Math.sqrt(dx * dx + dz * dz)
+  }
+}
+
+// ============================================================================
+// VISUALIZATION MODE EXPORT
+// ============================================================================
 
 export const waveField: VisualizationMode = {
   id: 'wave_field',
   name: 'Terrain',
-  description: 'Synthwave wireframe landscape with neon glow',
+  description: 'Synthwave wireframe landscape with frequency-mapped columns and audio-reactive perspective',
   
   // Hide particles - we use lines only
   hideParticles: true,
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     initTerrain()
+    currentPerspectiveFactor = BASE_FOV_FACTOR
+    currentHorizonOffset = 0
     
     // Hide all particles below view
     for (let i = 0; i < count; i++) {
@@ -73,12 +191,10 @@ export const waveField: VisualizationMode = {
     initTerrain()
     
     // Calculate number of line segments
-    // Horizontal lines: GRID_WIDTH-1 segments per row, GRID_DEPTH rows
-    // Vertical lines: GRID_DEPTH-1 segments per column, GRID_WIDTH columns
     const horizontalSegments = (GRID_WIDTH - 1) * GRID_DEPTH
     const verticalSegments = (GRID_DEPTH - 1) * GRID_WIDTH
     const totalSegments = horizontalSegments + verticalSegments
-    const vertexCount = totalSegments * 2 // 2 vertices per segment
+    const vertexCount = totalSegments * 2
     
     const positions = new Float32Array(vertexCount * 3)
     const colors = new Float32Array(vertexCount * 3)
@@ -112,157 +228,273 @@ export const waveField: VisualizationMode = {
         const halfWidth = (GRID_WIDTH - 1) * CELL_SIZE / 2
         const baseY = -20 // Ground level
         
-        // Update terrain heights with audio
-        const scrollSpeed = 8 + bands.overallSmooth * 6
+        // ================================================================
+        // AUDIO-REACTIVE PERSPECTIVE
+        // ================================================================
+        
+        // Bass increases FOV (perspective exaggeration)
+        const targetPerspective = BASE_FOV_FACTOR + bands.bassSmooth * MAX_FOV_INCREASE + bands.beatIntensity * 0.15
+        currentPerspectiveFactor += (targetPerspective - currentPerspectiveFactor) * 0.08
+        
+        // Overall energy affects horizon line
+        const targetHorizon = bands.overallSmooth * 8 + bands.beatIntensity * 4
+        currentHorizonOffset += (targetHorizon - currentHorizonOffset) * 0.05
+        
+        // ================================================================
+        // UPDATE TERRAIN HEIGHTS
+        // ================================================================
+        
+        const scrollSpeed = 6 + bands.overallSmooth * 8
         const scrollOffset = (time * scrollSpeed) % CELL_SIZE
         
         for (let z = 0; z < GRID_DEPTH; z++) {
+          // Depth factor for wave propagation
+          const depthFactor = z / GRID_DEPTH
+          const waveDelay = depthFactor * 0.3
+          
           for (let x = 0; x < GRID_WIDTH; x++) {
-            // Distance from center for effects
+            // Get frequency-mapped audio value for this column
+            const freqValue = getFrequencyForColumn(x, bands)
+            
+            // Distance from center for edge effects
             const centerX = Math.abs(x - GRID_WIDTH / 2) / (GRID_WIDTH / 2)
             
-            // Angular, geometric height calculation
-            // Bass creates big angular peaks
-            const bassWave = Math.floor(Math.sin(x * 0.3 + time * 1.5) * 3) / 3 * bands.bassSmooth * 12
+            // Main frequency-driven height
+            const freqHeight = freqValue * 15 * (1 - depthFactor * 0.5)
             
-            // Mids create medium ridges
-            const midRidge = Math.abs(Math.sin(z * 0.2 + time * 2)) * bands.midSmooth * 8
+            // Traveling wave effect
+            const travelWave = Math.sin(z * 0.15 - time * 2 + x * 0.1) * bands.midSmooth * 4
             
-            // Highs create sharp spikes
-            const highSpike = (Math.random() < 0.02 && bands.highSmooth > 0.3) 
-              ? bands.highSmooth * 15 : 0
-            
-            // Beat pulses create expanding rings
+            // Beat pulse creates expanding rings
             const distFromCenter = Math.sqrt(Math.pow(x - GRID_WIDTH/2, 2) + Math.pow(z - GRID_DEPTH/2, 2))
-            const beatRing = Math.sin(distFromCenter * 0.3 - time * 5) * bands.beatIntensity * 10
+            const beatRing = Math.sin(distFromCenter * 0.2 - time * 6) * bands.beatIntensity * 8
             
-            // Combine with angular quantization for retro feel
-            let totalHeight = bassWave + midRidge + beatRing
+            // BPM-synced pulse (if BPM detected)
+            let bpmPulse = 0
+            if (bands.estimatedBPM > 0) {
+              const bps = bands.estimatedBPM / 60
+              const beatPhase = (time * bps) % 1
+              bpmPulse = Math.sin(beatPhase * Math.PI * 2) * 0.5 + 0.5
+              bpmPulse *= bands.bassSmooth * 3
+            }
             
-            // Quantize heights to create stepped, angular look
-            totalHeight = Math.round(totalHeight * 2) / 2
+            // Stereo balance affects left/right asymmetry
+            const stereoOffset = bands.stereoBalance * (x - GRID_WIDTH/2) / GRID_WIDTH * 5
             
-            // Add persistent spikes
-            if (highSpike > 0) {
-              targetHeights[z][x] = Math.max(targetHeights[z][x], highSpike)
+            // High frequency sparkle (random spikes)
+            const sparkle = (Math.random() < 0.01 && bands.brillianceSmooth > 0.3) 
+              ? bands.brillianceSmooth * 10 : 0
+            
+            // Combine heights
+            let totalHeight = freqHeight + travelWave + beatRing + bpmPulse + stereoOffset
+            
+            // Quantize for retro angular feel
+            totalHeight = Math.round(totalHeight * 3) / 3
+            
+            // Add sparkle
+            if (sparkle > 0) {
+              targetHeights[z][x] = Math.max(targetHeights[z][x], sparkle)
             }
             
             // Smooth interpolation with decay
-            targetHeights[z][x] = Math.max(totalHeight, targetHeights[z][x] * 0.95)
-            terrainHeights[z][x] += (targetHeights[z][x] - terrainHeights[z][x]) * 0.15
+            targetHeights[z][x] = Math.max(totalHeight, targetHeights[z][x] * 0.92)
+            terrainHeights[z][x] += (targetHeights[z][x] - terrainHeights[z][x]) * 0.18
             
-            // Edges should be lower (creates canyon effect)
-            const edgeFade = 1 - Math.pow(centerX, 2) * 0.8
+            // Edge fade for canyon effect
+            const edgeFade = 1 - Math.pow(centerX, 2) * 0.7
             terrainHeights[z][x] *= edgeFade
           }
         }
         
+        // ================================================================
+        // RADIAL MODE TRANSFORMATION (if enabled)
+        // ================================================================
+        
         let vertexIndex = 0
         
-        // Draw horizontal lines (along X axis)
-        for (let z = 0; z < GRID_DEPTH; z++) {
-          const zPos = z * CELL_SIZE - scrollOffset
-          const perspectiveScale = getPerspectiveScale(z, GRID_DEPTH)
-          const depthFactor = z / GRID_DEPTH
+        if (currentMode === 'radial') {
+          // Radial visualization - grid wraps around center
+          const centerX_grid = GRID_WIDTH / 2
+          const centerZ_grid = GRID_DEPTH / 2
           
-          for (let x = 0; x < GRID_WIDTH - 1; x++) {
-            const x1World = (x * CELL_SIZE - halfWidth) * perspectiveScale
-            const x2World = ((x + 1) * CELL_SIZE - halfWidth) * perspectiveScale
+          // Draw circular rings
+          for (let z = 0; z < GRID_DEPTH; z++) {
+            const zPos = z * CELL_SIZE - scrollOffset
+            const ringRadius = z * CELL_SIZE * 0.3 + 5
+            const perspScale = getPerspectiveScale(z, GRID_DEPTH, currentPerspectiveFactor)
             
-            const height1 = terrainHeights[z][x]
-            const height2 = terrainHeights[z][x + 1]
-            
-            const y1 = getPerspectiveY(baseY + height1, z, GRID_DEPTH)
-            const y2 = getPerspectiveY(baseY + height2, z, GRID_DEPTH)
-            
-            // First vertex
-            pos[vertexIndex * 3] = x1World
-            pos[vertexIndex * 3 + 1] = y1
-            pos[vertexIndex * 3 + 2] = -zPos
-            
-            // Second vertex
-            pos[(vertexIndex + 1) * 3] = x2World
-            pos[(vertexIndex + 1) * 3 + 1] = y2
-            pos[(vertexIndex + 1) * 3 + 2] = -zPos
-            
-            // Neon synthwave colors
-            // Magenta/Cyan gradient based on height and depth
-            const avgHeight = (height1 + height2) / 2
-            const heightIntensity = Math.min(1, Math.abs(avgHeight) / 10)
-            
-            // Base hue: magenta (0.85) to cyan (0.5) based on depth
-            const baseHue = 0.85 - depthFactor * 0.35
-            const hue = baseHue + cycleHue * 0.3 + heightIntensity * 0.1
-            
-            // Higher = brighter
-            const lightness = 0.4 + heightIntensity * 0.3 + bands.beatIntensity * 0.2
-            const saturation = 0.9 + bands.overallSmooth * 0.1
-            
-            // Fade alpha towards horizon
-            const alpha = 1 - depthFactor * 0.6
-            
-            const [r, g, b] = hslToRgb(hue, saturation, lightness)
-            col[vertexIndex * 3] = r * alpha
-            col[vertexIndex * 3 + 1] = g * alpha
-            col[vertexIndex * 3 + 2] = b * alpha
-            col[(vertexIndex + 1) * 3] = r * alpha
-            col[(vertexIndex + 1) * 3 + 1] = g * alpha
-            col[(vertexIndex + 1) * 3 + 2] = b * alpha
-            
-            vertexIndex += 2
+            for (let x = 0; x < GRID_WIDTH - 1; x++) {
+              const angle1 = (x / GRID_WIDTH) * Math.PI * 2
+              const angle2 = ((x + 1) / GRID_WIDTH) * Math.PI * 2
+              
+              const height1 = terrainHeights[z][x]
+              const height2 = terrainHeights[z][x + 1]
+              
+              const r1 = ringRadius + height1 * 0.5
+              const r2 = ringRadius + height2 * 0.5
+              
+              pos[vertexIndex * 3] = Math.cos(angle1) * r1 * perspScale
+              pos[vertexIndex * 3 + 1] = baseY + height1 + Math.sin(angle1 * 2) * bands.midSmooth * 3
+              pos[vertexIndex * 3 + 2] = Math.sin(angle1) * r1 * perspScale - z * 0.5
+              
+              pos[(vertexIndex + 1) * 3] = Math.cos(angle2) * r2 * perspScale
+              pos[(vertexIndex + 1) * 3 + 1] = baseY + height2 + Math.sin(angle2 * 2) * bands.midSmooth * 3
+              pos[(vertexIndex + 1) * 3 + 2] = Math.sin(angle2) * r2 * perspScale - z * 0.5
+              
+              // Gradient-based coloring using frequency band
+              const freqBand = getFrequencyBandIndex(x) / 6
+              const [r, g, b] = sampleGradient(currentGradient, freqBand + cycleHue * 0.3)
+              const alpha = 1 - (z / GRID_DEPTH) * 0.5
+              
+              col[vertexIndex * 3] = r * alpha
+              col[vertexIndex * 3 + 1] = g * alpha
+              col[vertexIndex * 3 + 2] = b * alpha
+              col[(vertexIndex + 1) * 3] = r * alpha
+              col[(vertexIndex + 1) * 3 + 1] = g * alpha
+              col[(vertexIndex + 1) * 3 + 2] = b * alpha
+              
+              vertexIndex += 2
+            }
           }
-        }
-        
-        // Draw vertical lines (along Z axis) - creates the receding perspective
-        for (let x = 0; x < GRID_WIDTH; x++) {
-          for (let z = 0; z < GRID_DEPTH - 1; z++) {
-            const z1Pos = z * CELL_SIZE - scrollOffset
-            const z2Pos = (z + 1) * CELL_SIZE - scrollOffset
+          
+          // Radial spokes
+          for (let x = 0; x < GRID_WIDTH; x++) {
+            const angle = (x / GRID_WIDTH) * Math.PI * 2
             
-            const perspectiveScale1 = getPerspectiveScale(z, GRID_DEPTH)
-            const perspectiveScale2 = getPerspectiveScale(z + 1, GRID_DEPTH)
+            for (let z = 0; z < GRID_DEPTH - 1; z++) {
+              const r1 = z * CELL_SIZE * 0.3 + 5 + terrainHeights[z][x] * 0.5
+              const r2 = (z + 1) * CELL_SIZE * 0.3 + 5 + terrainHeights[z + 1][x] * 0.5
+              const perspScale1 = getPerspectiveScale(z, GRID_DEPTH, currentPerspectiveFactor)
+              const perspScale2 = getPerspectiveScale(z + 1, GRID_DEPTH, currentPerspectiveFactor)
+              
+              pos[vertexIndex * 3] = Math.cos(angle) * r1 * perspScale1
+              pos[vertexIndex * 3 + 1] = baseY + terrainHeights[z][x]
+              pos[vertexIndex * 3 + 2] = Math.sin(angle) * r1 * perspScale1 - z * 0.5
+              
+              pos[(vertexIndex + 1) * 3] = Math.cos(angle) * r2 * perspScale2
+              pos[(vertexIndex + 1) * 3 + 1] = baseY + terrainHeights[z + 1][x]
+              pos[(vertexIndex + 1) * 3 + 2] = Math.sin(angle) * r2 * perspScale2 - (z + 1) * 0.5
+              
+              const freqBand = getFrequencyBandIndex(x) / 6
+              const [r, g, b] = sampleGradient(currentGradient, freqBand + cycleHue * 0.3)
+              const alpha = 1 - ((z + 0.5) / GRID_DEPTH) * 0.6
+              
+              col[vertexIndex * 3] = r * alpha
+              col[vertexIndex * 3 + 1] = g * alpha
+              col[vertexIndex * 3 + 2] = b * alpha
+              col[(vertexIndex + 1) * 3] = r * alpha
+              col[(vertexIndex + 1) * 3 + 1] = g * alpha
+              col[(vertexIndex + 1) * 3 + 2] = b * alpha
+              
+              vertexIndex += 2
+            }
+          }
+        } else {
+          // ================================================================
+          // LINEAR MODE (default synthwave terrain)
+          // ================================================================
+          
+          // Draw horizontal lines (along X axis)
+          for (let z = 0; z < GRID_DEPTH; z++) {
+            const zPos = z * CELL_SIZE - scrollOffset
+            const perspectiveScale = getPerspectiveScale(z, GRID_DEPTH, currentPerspectiveFactor)
+            const depthFactor = z / GRID_DEPTH
             
-            const xWorld1 = (x * CELL_SIZE - halfWidth) * perspectiveScale1
-            const xWorld2 = (x * CELL_SIZE - halfWidth) * perspectiveScale2
-            
-            const height1 = terrainHeights[z][x]
-            const height2 = terrainHeights[z + 1][x]
-            
-            const y1 = getPerspectiveY(baseY + height1, z, GRID_DEPTH)
-            const y2 = getPerspectiveY(baseY + height2, z + 1, GRID_DEPTH)
-            
-            // First vertex
-            pos[vertexIndex * 3] = xWorld1
-            pos[vertexIndex * 3 + 1] = y1
-            pos[vertexIndex * 3 + 2] = -z1Pos
-            
-            // Second vertex
-            pos[(vertexIndex + 1) * 3] = xWorld2
-            pos[(vertexIndex + 1) * 3 + 1] = y2
-            pos[(vertexIndex + 1) * 3 + 2] = -z2Pos
-            
-            const vertDepthFactor = (z + 0.5) / GRID_DEPTH
-            const avgHeight = (height1 + height2) / 2
-            const heightIntensity = Math.min(1, Math.abs(avgHeight) / 10)
-            
-            // Vertical lines more cyan-shifted
-            const baseHue = 0.55 - vertDepthFactor * 0.1
-            const hue = baseHue + cycleHue * 0.3 + heightIntensity * 0.15
-            
-            const lightness = 0.35 + heightIntensity * 0.35 + bands.beatIntensity * 0.15
-            const saturation = 0.85
-            
-            const alpha = 1 - vertDepthFactor * 0.7
-            
-            const [r, g, b] = hslToRgb(hue, saturation, lightness)
-            col[vertexIndex * 3] = r * alpha
-            col[vertexIndex * 3 + 1] = g * alpha
-            col[vertexIndex * 3 + 2] = b * alpha
-            col[(vertexIndex + 1) * 3] = r * alpha
-            col[(vertexIndex + 1) * 3 + 1] = g * alpha
-            col[(vertexIndex + 1) * 3 + 2] = b * alpha
-            
-            vertexIndex += 2
+            for (let x = 0; x < GRID_WIDTH - 1; x++) {
+              const x1World = (x * CELL_SIZE - halfWidth) * perspectiveScale
+              const x2World = ((x + 1) * CELL_SIZE - halfWidth) * perspectiveScale
+              
+              const height1 = terrainHeights[z][x]
+              const height2 = terrainHeights[z][x + 1]
+              
+              const y1 = getPerspectiveY(baseY + height1, z, GRID_DEPTH, currentPerspectiveFactor)
+              const y2 = getPerspectiveY(baseY + height2, z, GRID_DEPTH, currentPerspectiveFactor)
+              
+              // First vertex
+              pos[vertexIndex * 3] = x1World
+              pos[vertexIndex * 3 + 1] = y1
+              pos[vertexIndex * 3 + 2] = -zPos
+              
+              // Second vertex
+              pos[(vertexIndex + 1) * 3] = x2World
+              pos[(vertexIndex + 1) * 3 + 1] = y2
+              pos[(vertexIndex + 1) * 3 + 2] = -zPos
+              
+              // Color based on frequency band mapping
+              const avgHeight = (height1 + height2) / 2
+              const heightIntensity = Math.min(1, Math.abs(avgHeight) / 12)
+              const freqBand = getFrequencyBandIndex(x)
+              
+              // Sample from gradient based on frequency position
+              const gradientPos = (freqBand / 6) + cycleHue * 0.2
+              const [r, g, b] = sampleGradient(currentGradient, gradientPos)
+              
+              // Brightness based on height and beats
+              const brightness = 0.4 + heightIntensity * 0.4 + bands.beatIntensity * 0.2
+              
+              // Fade alpha towards horizon
+              const alpha = (1 - depthFactor * 0.6) * brightness
+              
+              col[vertexIndex * 3] = r * alpha
+              col[vertexIndex * 3 + 1] = g * alpha
+              col[vertexIndex * 3 + 2] = b * alpha
+              col[(vertexIndex + 1) * 3] = r * alpha
+              col[(vertexIndex + 1) * 3 + 1] = g * alpha
+              col[(vertexIndex + 1) * 3 + 2] = b * alpha
+              
+              vertexIndex += 2
+            }
+          }
+          
+          // Draw vertical lines (along Z axis)
+          for (let x = 0; x < GRID_WIDTH; x++) {
+            for (let z = 0; z < GRID_DEPTH - 1; z++) {
+              const z1Pos = z * CELL_SIZE - scrollOffset
+              const z2Pos = (z + 1) * CELL_SIZE - scrollOffset
+              
+              const perspectiveScale1 = getPerspectiveScale(z, GRID_DEPTH, currentPerspectiveFactor)
+              const perspectiveScale2 = getPerspectiveScale(z + 1, GRID_DEPTH, currentPerspectiveFactor)
+              
+              const xWorld1 = (x * CELL_SIZE - halfWidth) * perspectiveScale1
+              const xWorld2 = (x * CELL_SIZE - halfWidth) * perspectiveScale2
+              
+              const height1 = terrainHeights[z][x]
+              const height2 = terrainHeights[z + 1][x]
+              
+              const y1 = getPerspectiveY(baseY + height1, z, GRID_DEPTH, currentPerspectiveFactor)
+              const y2 = getPerspectiveY(baseY + height2, z + 1, GRID_DEPTH, currentPerspectiveFactor)
+              
+              // First vertex
+              pos[vertexIndex * 3] = xWorld1
+              pos[vertexIndex * 3 + 1] = y1
+              pos[vertexIndex * 3 + 2] = -z1Pos
+              
+              // Second vertex
+              pos[(vertexIndex + 1) * 3] = xWorld2
+              pos[(vertexIndex + 1) * 3 + 1] = y2
+              pos[(vertexIndex + 1) * 3 + 2] = -z2Pos
+              
+              const vertDepthFactor = (z + 0.5) / GRID_DEPTH
+              const avgHeight = (height1 + height2) / 2
+              const heightIntensity = Math.min(1, Math.abs(avgHeight) / 12)
+              const freqBand = getFrequencyBandIndex(x)
+              
+              // Slightly shifted gradient for vertical lines
+              const gradientPos = (freqBand / 6) + cycleHue * 0.2 + 0.1
+              const [r, g, b] = sampleGradient(currentGradient, gradientPos)
+              
+              const brightness = 0.35 + heightIntensity * 0.4 + bands.beatIntensity * 0.15
+              const alpha = (1 - vertDepthFactor * 0.7) * brightness
+              
+              col[vertexIndex * 3] = r * alpha
+              col[vertexIndex * 3 + 1] = g * alpha
+              col[vertexIndex * 3 + 2] = b * alpha
+              col[(vertexIndex + 1) * 3] = r * alpha
+              col[(vertexIndex + 1) * 3 + 1] = g * alpha
+              col[(vertexIndex + 1) * 3 + 2] = b * alpha
+              
+              vertexIndex += 2
+            }
           }
         }
         
@@ -298,4 +530,23 @@ export const waveField: VisualizationMode = {
       sizes[i] = 0
     }
   }
+}
+
+// ============================================================================
+// PUBLIC API FOR MODE SWITCHING
+// ============================================================================
+
+/** Switch between linear and radial terrain modes */
+export function setTerrainMode(mode: TerrainMode) {
+  currentMode = mode
+}
+
+/** Get current terrain mode */
+export function getTerrainMode(): TerrainMode {
+  return currentMode
+}
+
+/** Set gradient preset for terrain */
+export function setTerrainGradient(gradient: typeof currentGradient) {
+  currentGradient = gradient
 }

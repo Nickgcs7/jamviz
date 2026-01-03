@@ -5,27 +5,27 @@ import { builtInGradients, sampleGradient } from '../gradients'
 import * as THREE from 'three'
 
 // ============================================================================
-// ROADWAY CONFIGURATION - Driving down a road perspective
+// ROADWAY CONFIGURATION - Full-screen driving perspective
 // ============================================================================
 
-// Grid spans the full viewport height, road flows from top to bottom
+// Extends from very top to very bottom of screen
 const GRID_WIDTH = 50       // Road width (X axis)
-const GRID_DEPTH = 80       // Road length (Z axis) - extended for more screen coverage
-const CELL_SIZE = 2.0       // Smaller cells for finer detail
-const ROAD_HEIGHT_BASE = -10  // Lower base to fill more vertical space
+const GRID_DEPTH = 100      // Road length (Z axis) - extended to fill entire screen
+const CELL_SIZE = 1.6       // Smaller cells for smoother coverage
+const ROAD_HEIGHT_BASE = -25 // Much lower to start from bottom of view
 
-// View zones - middle third is where the action happens
-const VIEW_ZONE_NEAR = 0.25   // Near edge of view zone
-const VIEW_ZONE_FAR = 0.75    // Far edge of view zone
+// View zones - entire screen is active
+const VIEW_ZONE_NEAR = 0.15   // Very top
+const VIEW_ZONE_FAR = 0.85    // Very bottom
 
 // Motion parameters
-const BASE_SPEED = 8          // Base forward movement speed
-const MAX_SPEED_BOOST = 12    // Additional speed from bass
+const BASE_SPEED = 8
+const MAX_SPEED_BOOST = 12
 
-// Visual intensity zones
-const INTENSITY_NEAR = 0.4    // Visual intensity in near zone
-const INTENSITY_VIEW = 1.0    // Visual intensity in view zone (full)
-const INTENSITY_FAR = 0.3     // Visual intensity in far zone
+// Visual intensity - more even across entire screen
+const INTENSITY_NEAR = 0.7
+const INTENSITY_VIEW = 1.0
+const INTENSITY_FAR = 0.5
 
 // ============================================================================
 // STATE
@@ -38,88 +38,57 @@ let lineMaterial: THREE.LineBasicMaterial | null = null
 let lineSegments: THREE.LineSegments | null = null
 let currentGradient = builtInGradients.synthwave
 
-// Smooth camera motion
 let currentCameraY = 0
 let currentSpeed = BASE_SPEED
 
 // ============================================================================
-// FREQUENCY MAPPING FOR ROAD LANES
+// HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Maps road position (left to right) to frequency bands
- * Creates a stereo-like effect where different frequencies appear in different lanes
- */
 function getFrequencyForLane(x: number, bands: AudioBands): number {
-  const normalizedX = x / (GRID_WIDTH - 1)  // 0 (left) to 1 (right)
+  const normalizedX = x / (GRID_WIDTH - 1)
+  const distFromCenter = Math.abs(normalizedX - 0.5) * 2
   
-  // Center lane gets bass, outer lanes get higher frequencies
-  const distFromCenter = Math.abs(normalizedX - 0.5) * 2  // 0 (center) to 1 (edge)
-  
-  if (distFromCenter < 0.2) {
-    // Center lanes: bass and sub-bass
-    return (bands.bassSmooth + bands.subBassSmooth) * 0.5
-  } else if (distFromCenter < 0.4) {
-    // Inner lanes: low-mid
+  if (distFromCenter < 0.2) return (bands.bassSmooth + bands.subBassSmooth) * 0.5
+  else if (distFromCenter < 0.4) {
     const t = (distFromCenter - 0.2) / 0.2
     return bands.bassSmooth * (1 - t) + bands.lowMidSmooth * t
   } else if (distFromCenter < 0.6) {
-    // Mid lanes: mid frequencies
     const t = (distFromCenter - 0.4) / 0.2
     return bands.lowMidSmooth * (1 - t) + bands.midSmooth * t
   } else if (distFromCenter < 0.8) {
-    // Outer lanes: high-mid
     const t = (distFromCenter - 0.6) / 0.2
     return bands.midSmooth * (1 - t) + bands.highMidSmooth * t
   } else {
-    // Edge lanes: treble and brilliance
     const t = (distFromCenter - 0.8) / 0.2
     return bands.highMidSmooth * (1 - t) + bands.trebleSmooth * t
   }
 }
 
-/**
- * Calculate visual intensity based on depth zone
- * Middle third is brightest (the "view" zone)
- */
 function getZoneIntensity(z: number): number {
   const normalizedZ = z / GRID_DEPTH
   
   if (normalizedZ < VIEW_ZONE_NEAR) {
-    // Near zone - fade in
     return INTENSITY_NEAR + (INTENSITY_VIEW - INTENSITY_NEAR) * (normalizedZ / VIEW_ZONE_NEAR)
   } else if (normalizedZ < VIEW_ZONE_FAR) {
-    // View zone (middle) - full intensity
     return INTENSITY_VIEW
   } else {
-    // Far zone - fade out toward horizon
     const farProgress = (normalizedZ - VIEW_ZONE_FAR) / (1 - VIEW_ZONE_FAR)
     return INTENSITY_VIEW - (INTENSITY_VIEW - INTENSITY_FAR) * farProgress
   }
 }
 
-/**
- * Get perspective scale - road narrows toward horizon (more gradual for top-down view)
- */
 function getPerspectiveScale(z: number): number {
   const normalizedZ = z / GRID_DEPTH
-  // Less dramatic narrowing for more top-down feel
-  return 1 - normalizedZ * 0.4  // Road narrows to 60% width at horizon
+  return 1 - normalizedZ * 0.3  // Very gentle narrowing
 }
 
-/**
- * Get perspective Y - much gentler rise for top-down view
- */
 function getPerspectiveY(baseY: number, z: number): number {
   const normalizedZ = z / GRID_DEPTH
-  // Much gentler vertical curve - more flat/top-down
-  const horizonLift = Math.pow(normalizedZ, 2.5) * 35  // Gentler curve, extends further
+  // Extended vertical range to fill screen top to bottom
+  const horizonLift = Math.pow(normalizedZ, 2.8) * 55
   return baseY + horizonLift + currentCameraY
 }
-
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
 
 function initRoadway() {
   terrainHeights.length = 0
@@ -136,13 +105,13 @@ function initRoadway() {
 }
 
 // ============================================================================
-// VISUALIZATION MODE EXPORT
+// VISUALIZATION EXPORT
 // ============================================================================
 
 export const roadway: VisualizationMode = {
   id: 'roadway',
   name: 'Roadway',
-  description: 'Drive down an endless audio-reactive highway with frequency-mapped lanes',
+  description: 'Drive down an endless audio-reactive highway filling the entire screen',
   
   hideParticles: true,
 
@@ -199,82 +168,49 @@ export const roadway: VisualizationMode = {
         
         const halfWidth = (GRID_WIDTH - 1) * CELL_SIZE / 2
         
-        // ================================================================
-        // AUDIO-REACTIVE CAMERA & SPEED
-        // ================================================================
-        
-        // Bass controls speed - more bass = faster movement
         const targetSpeed = BASE_SPEED + bands.bassSmooth * MAX_SPEED_BOOST + bands.beatIntensity * 6
         currentSpeed += (targetSpeed - currentSpeed) * 0.1
         
-        // Overall energy creates camera shake/bounce
         const targetCameraY = Math.sin(time * 3) * bands.midSmooth * 2 + bands.beatIntensity * 3
         currentCameraY += (targetCameraY - currentCameraY) * 0.08
         
-        // Forward motion offset (road scrolling)
         const scrollOffset = (time * currentSpeed) % CELL_SIZE
-        
-        // ================================================================
-        // UPDATE TERRAIN HEIGHTS
-        // ================================================================
         
         for (let z = 0; z < GRID_DEPTH; z++) {
           const zoneIntensity = getZoneIntensity(z)
           const normalizedZ = z / GRID_DEPTH
           
           for (let x = 0; x < GRID_WIDTH; x++) {
-            // Get frequency for this lane
             const freqValue = getFrequencyForLane(x, bands)
-            
-            // Base height from frequency
             let height = freqValue * 12 * zoneIntensity
             
-            // Traveling waves down the road
             const travelWave = Math.sin(z * 0.2 - time * 4) * bands.midSmooth * 5 * zoneIntensity
             height += travelWave
             
-            // Beat pulse creates expanding rings from center
             const distFromCenter = Math.abs(x - GRID_WIDTH / 2)
             const beatRing = Math.sin((distFromCenter * 0.3 + z * 0.15) - time * 8) * bands.beatIntensity * 8 * zoneIntensity
             height += beatRing
             
-            // Lane markers (brighter spots along certain columns)
-            if (x % 8 === 0 || x % 8 === 7) {
-              height += bands.highSmooth * 3 * zoneIntensity
-            }
+            if (x % 8 === 0 || x % 8 === 7) height += bands.highSmooth * 3 * zoneIntensity
+            if (Math.abs(x - GRID_WIDTH / 2) < 2) height += bands.bassSmooth * 4 * zoneIntensity
             
-            // Center line emphasis
-            if (Math.abs(x - GRID_WIDTH / 2) < 2) {
-              height += bands.bassSmooth * 4 * zoneIntensity
-            }
-            
-            // Stereo balance creates asymmetry
             const stereoEffect = bands.stereoBalance * (x - GRID_WIDTH / 2) / GRID_WIDTH * 8
             height += stereoEffect * zoneIntensity
             
-            // High frequency sparkles in the view zone
             if (normalizedZ > VIEW_ZONE_NEAR && normalizedZ < VIEW_ZONE_FAR) {
               if (Math.random() < 0.005 && bands.brillianceSmooth > 0.4) {
                 height += bands.brillianceSmooth * 12
               }
             }
             
-            // Quantize for angular retro look
             height = Math.round(height * 2) / 2
-            
-            // Smooth interpolation
             targetHeights[z][x] = height
             terrainHeights[z][x] += (targetHeights[z][x] - terrainHeights[z][x]) * 0.15
           }
         }
         
-        // ================================================================
-        // RENDER GRID
-        // ================================================================
-        
         let vertexIndex = 0
         
-        // Horizontal lines (across the road)
         for (let z = 0; z < GRID_DEPTH; z++) {
           const zPos = z * CELL_SIZE - scrollOffset
           const perspScale = getPerspectiveScale(z)
@@ -298,7 +234,6 @@ export const roadway: VisualizationMode = {
             pos[(vertexIndex + 1) * 3 + 1] = y2
             pos[(vertexIndex + 1) * 3 + 2] = -zPos
             
-            // Color based on lane position and zone
             const lanePosition = x / (GRID_WIDTH - 1)
             const gradientPos = lanePosition + cycleHue * 0.3
             const [r, g, b] = sampleGradient(currentGradient, gradientPos)
@@ -318,7 +253,6 @@ export const roadway: VisualizationMode = {
           }
         }
         
-        // Vertical lines (down the road)
         for (let x = 0; x < GRID_WIDTH; x++) {
           const lanePosition = x / (GRID_WIDTH - 1)
           
@@ -395,7 +329,6 @@ export const roadway: VisualizationMode = {
   }
 }
 
-/** Set gradient for roadway */
 export function setRoadwayGradient(gradient: typeof currentGradient) {
   currentGradient = gradient
 }

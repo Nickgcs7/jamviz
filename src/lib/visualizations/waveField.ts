@@ -1,6 +1,6 @@
 import type { VisualizationMode, SceneObjects } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb, getCyclingHue } from '../colorUtils'
+import { getCyclingHue } from '../colorUtils'
 import { builtInGradients, sampleGradient } from '../gradients'
 import * as THREE from 'three'
 
@@ -142,23 +142,6 @@ function getPerspectiveScale(z: number, depth: number, perspectiveFactor: number
   return 1 - perspectiveProgress * (0.65 + (perspectiveFactor - 1) * 0.2)
 }
 
-/**
- * Convert cartesian to polar for radial mode
- */
-function cartesianToRadial(
-  x: number,
-  z: number,
-  centerX: number,
-  centerZ: number
-): { angle: number; radius: number } {
-  const dx = x - centerX
-  const dz = z - centerZ
-  return {
-    angle: Math.atan2(dz, dx),
-    radius: Math.sqrt(dx * dx + dz * dz)
-  }
-}
-
 // ============================================================================
 // VISUALIZATION MODE EXPORT
 // ============================================================================
@@ -250,7 +233,6 @@ export const waveField: VisualizationMode = {
         for (let z = 0; z < GRID_DEPTH; z++) {
           // Depth factor for wave propagation
           const depthFactor = z / GRID_DEPTH
-          const waveDelay = depthFactor * 0.3
           
           for (let x = 0; x < GRID_WIDTH; x++) {
             // Get frequency-mapped audio value for this column
@@ -313,13 +295,8 @@ export const waveField: VisualizationMode = {
         let vertexIndex = 0
         
         if (currentMode === 'radial') {
-          // Radial visualization - grid wraps around center
-          const centerX_grid = GRID_WIDTH / 2
-          const centerZ_grid = GRID_DEPTH / 2
-          
           // Draw circular rings
           for (let z = 0; z < GRID_DEPTH; z++) {
-            const zPos = z * CELL_SIZE - scrollOffset
             const ringRadius = z * CELL_SIZE * 0.3 + 5
             const perspScale = getPerspectiveScale(z, GRID_DEPTH, currentPerspectiveFactor)
             

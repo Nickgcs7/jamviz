@@ -80,7 +80,6 @@ let corePeakValue = 0
 let corePeakHoldTimer = 0
 let lastUpdateTime = 0
 let lastBPMBeatTime = 0
-let bpmBeatPhase = 0
 
 let currentGradient = builtInGradients.fire
 
@@ -216,11 +215,10 @@ function updateCorePeakHold(currentValue: number, deltaTime: number) {
   return Math.max(corePeakValue, currentValue)
 }
 
-function updateBPMSync(bands: AudioBands, time: number) {
+function updateBPMSync(bands: AudioBands, time: number): boolean {
   if (bands.estimatedBPM <= 0) return false
   const bps = bands.estimatedBPM / 60
   const beatInterval = 1 / bps
-  bpmBeatPhase = (time * bps) % 1
   const timeSinceLastBeat = time - lastBPMBeatTime
   if (timeSinceLastBeat >= beatInterval * 0.95) {
     lastBPMBeatTime = time
@@ -245,7 +243,7 @@ export const explosion: VisualizationMode = {
     initShockwaves()
     initDebrisParticles()
     lastBeatTime = lastBassHitTime = lastBPMBeatTime = 0
-    cumulativeExplosionForce = corePeakValue = corePeakHoldTimer = lastUpdateTime = bpmBeatPhase = 0
+    cumulativeExplosionForce = corePeakValue = corePeakHoldTimer = lastUpdateTime = 0
 
     for (let i = 0; i < count; i++) {
       if (i < CORE_PARTICLES) {
@@ -440,7 +438,7 @@ export const explosion: VisualizationMode = {
         const life = 1 - particle.age / particle.maxAge
         const lifeFade = Math.pow(life, 0.5)
         const distFromCenter = Math.sqrt(px * px + py * py + pz * pz)
-        let gradientOffset = particle.stereoSide === 'left' ? -0.1 : particle.stereoSide === 'right' ? 0.1 : 0
+        const gradientOffset = particle.stereoSide === 'left' ? -0.1 : particle.stereoSide === 'right' ? 0.1 : 0
         const [r, g, b] = sampleGradient(currentGradient, Math.min(1, distFromCenter / 30) * 0.6 + cycleHue * 0.2 + gradientOffset)
         colors[particleIndex * 3] = r * lifeFade; colors[particleIndex * 3 + 1] = g * lifeFade; colors[particleIndex * 3 + 2] = b * lifeFade
         sizes[particleIndex] = (1.5 + bands.beatIntensity * 3) * lifeFade

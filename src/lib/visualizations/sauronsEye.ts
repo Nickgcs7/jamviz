@@ -1,6 +1,6 @@
 import type { VisualizationMode, SceneObjects } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb, getCyclingHue } from '../colorUtils'
+import { getCyclingHue } from '../colorUtils'
 import { builtInGradients, sampleGradient } from '../gradients'
 import * as THREE from 'three'
 
@@ -320,7 +320,7 @@ export const sauronsEye: VisualizationMode = {
 
   animate(
     positions: Float32Array,
-    originalPositions: Float32Array,
+    _originalPositions: Float32Array,
     sizes: Float32Array,
     colors: Float32Array,
     count: number,

@@ -21,9 +21,6 @@ const BLOB_DESPAWN_THRESHOLD = 0.15  // Energy level to remove blob
 // Physics constants
 const GRAVITY_BASE = 0.15
 const BUOYANCY_FACTOR = 0.3
-const COLLISION_RADIUS = 8
-const MERGE_DISTANCE = 5
-const SPLIT_VELOCITY = 0.8
 
 // ============================================================================
 // STATE
@@ -44,14 +41,14 @@ let shaderMaterial: THREE.ShaderMaterial | null = null
 // ============================================================================
 
 // Check and handle blob collisions
-function handleCollisions(blobs: MetaBlob[], dt: number): void {
-  for (let i = 0; i < blobs.length; i++) {
-    for (let j = i + 1; j < blobs.length; j++) {
-      const dx = blobs[j].x - blobs[i].x
-      const dy = blobs[j].y - blobs[i].y
+function handleCollisions(blobList: MetaBlob[]): void {
+  for (let i = 0; i < blobList.length; i++) {
+    for (let j = i + 1; j < blobList.length; j++) {
+      const dx = blobList[j].x - blobList[i].x
+      const dy = blobList[j].y - blobList[i].y
       const dist = Math.sqrt(dx * dx + dy * dy)
       
-      const minDist = (blobs[i].baseSize + blobs[j].baseSize) * 0.6
+      const minDist = (blobList[i].baseSize + blobList[j].baseSize) * 0.6
       
       if (dist < minDist && dist > 0.1) {
         // Blobs are overlapping - push them apart
@@ -61,15 +58,15 @@ function handleCollisions(blobs: MetaBlob[], dt: number): void {
         
         // Softer collision response
         const pushStrength = overlap * 0.15
-        blobs[i].x -= nx * pushStrength
-        blobs[i].y -= ny * pushStrength
-        blobs[j].x += nx * pushStrength
-        blobs[j].y += ny * pushStrength
+        blobList[i].x -= nx * pushStrength
+        blobList[i].y -= ny * pushStrength
+        blobList[j].x += nx * pushStrength
+        blobList[j].y += ny * pushStrength
         
         // Transfer some velocity on collision
-        const avgVel = (blobs[i].velocity + blobs[j].velocity) * 0.5
-        blobs[i].velocity = blobs[i].velocity * 0.7 + avgVel * 0.3
-        blobs[j].velocity = blobs[j].velocity * 0.7 + avgVel * 0.3
+        const avgVel = (blobList[i].velocity + blobList[j].velocity) * 0.5
+        blobList[i].velocity = blobList[i].velocity * 0.7 + avgVel * 0.3
+        blobList[j].velocity = blobList[j].velocity * 0.7 + avgVel * 0.3
       }
     }
   }
@@ -307,7 +304,7 @@ export const lavaLamp: VisualizationMode = {
         }
         
         // Handle collisions
-        handleCollisions(blobs, dt)
+        handleCollisions(blobs)
         
         // Update other uniforms
         shaderMaterial.uniforms.uTime.value = time

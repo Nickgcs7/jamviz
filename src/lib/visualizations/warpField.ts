@@ -72,7 +72,7 @@ function updateAttractorStrength(attractor: WarpAttractor, bands: AudioBands): v
   attractor.strength += (attractor.targetStrength - attractor.strength) * 0.12
 }
 
-function spawnAttractor(time: number): void {
+function spawnAttractor(): void {
   if (attractors.length >= MAX_ATTRACTORS) return
   
   // Spawn at random edge position
@@ -205,7 +205,7 @@ export const warpField: VisualizationMode = {
         
         // Dynamic attractor count based on sustained energy
         if (bands.overallSmooth > ATTRACTOR_SPAWN_THRESHOLD && time - lastSpawnTime > 2.5) {
-          spawnAttractor(time)
+          spawnAttractor()
           lastSpawnTime = time
         } else if (bands.overallSmooth < ATTRACTOR_DESPAWN_THRESHOLD && time - lastDespawnTime > 3.5) {
           despawnAttractor()

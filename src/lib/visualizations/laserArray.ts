@@ -18,7 +18,7 @@ const TRAIL_PARTICLES_PER_BEAM = 20
 const MAX_TRAIL_PARTICLES = MAX_BEAMS * TRAIL_PARTICLES_PER_BEAM
 
 // Mirror mode state
-let mirrorMode = true
+const mirrorMode = true
 
 // Color mode: 'gradient' | 'bar-level' | 'stereo'
 type ColorMode = 'gradient' | 'bar-level' | 'stereo'
@@ -375,23 +375,18 @@ export const laserArray: VisualizationMode = {
             const beamGlobalIndex = f * BEAMS_PER_FIXTURE + b
             
             // Get band-specific audio data
-            let bandEnergy: number
             let bandSmooth: number
             switch (beam.frequencyBand) {
               case 'bass':
-                bandEnergy = bands.bass
                 bandSmooth = bands.bassSmooth
                 break
               case 'mid':
-                bandEnergy = bands.mid
                 bandSmooth = bands.midSmooth
                 break
               case 'high':
-                bandEnergy = bands.high
                 bandSmooth = bands.highSmooth
                 break
               case 'treble':
-                bandEnergy = bands.treble
                 bandSmooth = bands.trebleSmooth
                 break
             }

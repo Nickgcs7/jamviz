@@ -9,9 +9,11 @@ import { warpField } from './warpField'
 import { yuleLog } from './yuleLog'
 import { radialSpectrum, setRadialMode, getRadialMode, setRadialGradient } from './radialSpectrum'
 import { spectrumAnalyzer, setSpectrumGradient, setSpectrumSmoothing } from './spectrumAnalyzer'
+import { roadway, setRoadwayGradient } from './roadway'
 
 export const visualizations = [
   waveField,
+  roadway,
   explosion,
   laserArray,
   lavaLamp,
@@ -28,6 +30,9 @@ export {
   setTerrainMode,
   getTerrainMode,
   setTerrainGradient,
+  
+  // Roadway
+  setRoadwayGradient,
   
   // Supernova / Explosion
   setSupernovaGradient,

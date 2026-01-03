@@ -1,7 +1,7 @@
 export type { VisualizationMode, SceneObjects } from './types'
 
 import { waveField, setTerrainMode, getTerrainMode, setTerrainGradient } from './waveField'
-import { explosion, setSupernovaGradient } from './explosion'
+import { sauronsEye, setSauronsEyeGradient } from './sauronsEye'
 import { laserArray } from './laserArray'
 import { lavaLamp } from './lavaLamp'
 import { ledMatrix } from './ledMatrix'
@@ -14,7 +14,7 @@ import { roadway, setRoadwayGradient } from './roadway'
 export const visualizations = [
   waveField,
   roadway,
-  explosion,
+  sauronsEye,
   laserArray,
   lavaLamp,
   ledMatrix,
@@ -34,8 +34,8 @@ export {
   // Roadway
   setRoadwayGradient,
   
-  // Supernova / Explosion
-  setSupernovaGradient,
+  // Sauron's Eye
+  setSauronsEyeGradient,
   
   // Radial Spectrum
   setRadialMode,

@@ -4,7 +4,7 @@
  * Provides shared color themes across all visualizations
  */
 
-import { hslToRgb, getCyclingHue } from './colorUtils'
+import { hslToRgb } from './colorUtils'
 import type { AudioBands } from './AudioAnalyzer'
 
 // ============================================================================
@@ -390,7 +390,6 @@ export interface ReactiveColorOptions {
   totalBars?: number      // For 'bar-index' mode
   frequencyBand?: number  // For 'frequency' mode: which band (0-6)
   bands?: AudioBands      // Audio data for dynamic effects
-  time?: number           // Time for cycling effects
 }
 
 /**
@@ -405,8 +404,7 @@ export function getReactiveGradientColor(options: ReactiveColorOptions): [number
     index = 0,
     totalBars = 1,
     frequencyBand = 0,
-    bands,
-    time = 0
+    bands
   } = options
   
   let baseColor: [number, number, number]
@@ -435,7 +433,6 @@ export function getReactiveGradientColor(options: ReactiveColorOptions): [number
   
   // Apply audio reactivity if bands provided
   if (bands) {
-    const _cycleHue = getCyclingHue(time)
     const beatBoost = bands.beatIntensity * 0.2
     const overallBoost = bands.overallSmooth * 0.1
     
@@ -471,8 +468,7 @@ export function frequencyToGradientPosition(frequency: number, minFreq = 20, max
 export function getColorForFrequency(
   gradient: GradientPreset,
   frequency: number,
-  amplitude: number = 1,
-  _time: number = 0
+  amplitude: number = 1
 ): [number, number, number] {
   const position = frequencyToGradientPosition(frequency)
   const [r, g, b] = sampleGradient(gradient, position)

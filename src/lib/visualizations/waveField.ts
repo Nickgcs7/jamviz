@@ -188,7 +188,7 @@ function initTerrain() {
 // MUSICAL ANALYSIS
 // ============================================================================
 
-function analyzeMusic(bands: AudioBands, time: number, dt: number) {
+function analyzeMusic(bands: AudioBands, time: number, _dt: number) {
   // Track energy over time for intelligent reactions
   energyHistory.push(bands.overallSmooth)
   if (energyHistory.length > 60) energyHistory.shift()

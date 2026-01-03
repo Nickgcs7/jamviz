@@ -10,22 +10,22 @@ import * as THREE from 'three'
 
 // Grid spans the full viewport height, road flows from top to bottom
 const GRID_WIDTH = 50       // Road width (X axis)
-const GRID_DEPTH = 60       // Road length (Z axis) - extends from top to bottom
-const CELL_SIZE = 2.5       // Size of each cell
-const ROAD_HEIGHT_BASE = 0  // Base elevation
+const GRID_DEPTH = 80       // Road length (Z axis) - extended for more screen coverage
+const CELL_SIZE = 2.0       // Smaller cells for finer detail
+const ROAD_HEIGHT_BASE = -10  // Lower base to fill more vertical space
 
 // View zones - middle third is where the action happens
-const VIEW_ZONE_NEAR = 0.33   // Near edge of view zone (top third)
-const VIEW_ZONE_FAR = 0.67    // Far edge of view zone (bottom third)
+const VIEW_ZONE_NEAR = 0.25   // Near edge of view zone
+const VIEW_ZONE_FAR = 0.75    // Far edge of view zone
 
 // Motion parameters
 const BASE_SPEED = 8          // Base forward movement speed
 const MAX_SPEED_BOOST = 12    // Additional speed from bass
 
 // Visual intensity zones
-const INTENSITY_NEAR = 0.3    // Visual intensity in near zone (faded)
+const INTENSITY_NEAR = 0.4    // Visual intensity in near zone
 const INTENSITY_VIEW = 1.0    // Visual intensity in view zone (full)
-const INTENSITY_FAR = 0.2     // Visual intensity in far zone (faded)
+const INTENSITY_FAR = 0.3     // Visual intensity in far zone
 
 // ============================================================================
 // STATE
@@ -86,32 +86,34 @@ function getZoneIntensity(z: number): number {
   const normalizedZ = z / GRID_DEPTH
   
   if (normalizedZ < VIEW_ZONE_NEAR) {
-    // Near zone (top third) - fade in
+    // Near zone - fade in
     return INTENSITY_NEAR + (INTENSITY_VIEW - INTENSITY_NEAR) * (normalizedZ / VIEW_ZONE_NEAR)
   } else if (normalizedZ < VIEW_ZONE_FAR) {
-    // View zone (middle third) - full intensity
+    // View zone (middle) - full intensity
     return INTENSITY_VIEW
   } else {
-    // Far zone (bottom third) - fade out toward horizon
+    // Far zone - fade out toward horizon
     const farProgress = (normalizedZ - VIEW_ZONE_FAR) / (1 - VIEW_ZONE_FAR)
     return INTENSITY_VIEW - (INTENSITY_VIEW - INTENSITY_FAR) * farProgress
   }
 }
 
 /**
- * Get perspective scale - road narrows toward horizon
+ * Get perspective scale - road narrows toward horizon (more gradual for top-down view)
  */
 function getPerspectiveScale(z: number): number {
   const normalizedZ = z / GRID_DEPTH
-  return 1 - normalizedZ * 0.7  // Road narrows to 30% width at horizon
+  // Less dramatic narrowing for more top-down feel
+  return 1 - normalizedZ * 0.4  // Road narrows to 60% width at horizon
 }
 
 /**
- * Get perspective Y - road rises toward horizon
+ * Get perspective Y - much gentler rise for top-down view
  */
 function getPerspectiveY(baseY: number, z: number): number {
   const normalizedZ = z / GRID_DEPTH
-  const horizonLift = Math.pow(normalizedZ, 1.8) * 25  // Gentle curve upward
+  // Much gentler vertical curve - more flat/top-down
+  const horizonLift = Math.pow(normalizedZ, 2.5) * 35  // Gentler curve, extends further
   return baseY + horizonLift + currentCameraY
 }
 

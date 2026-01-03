@@ -368,7 +368,7 @@ export function sampleGradientByLevel(
 export function getColorByIndex(
   gradient: GradientPreset,
   index: number,
-  totalBars: number
+  _totalBars: number
 ): [number, number, number] {
   const stops = parseColorStops(gradient.colorStops)
   if (stops.length === 0) return [1, 1, 1]
@@ -435,7 +435,7 @@ export function getReactiveGradientColor(options: ReactiveColorOptions): [number
   
   // Apply audio reactivity if bands provided
   if (bands) {
-    const cycleHue = getCyclingHue(time)
+    const _cycleHue = getCyclingHue(time)
     const beatBoost = bands.beatIntensity * 0.2
     const overallBoost = bands.overallSmooth * 0.1
     
@@ -472,7 +472,7 @@ export function getColorForFrequency(
   gradient: GradientPreset,
   frequency: number,
   amplitude: number = 1,
-  time: number = 0
+  _time: number = 0
 ): [number, number, number] {
   const position = frequencyToGradientPosition(frequency)
   const [r, g, b] = sampleGradient(gradient, position)

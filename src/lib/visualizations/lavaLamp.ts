@@ -5,31 +5,180 @@ import {
   metaballVertexShader,
   lavaLampFragmentShader,
   createFullscreenQuad,
-  initLavaLampBlobs,
   getBlobColor,
   type MetaBlob
 } from './metaballUtils'
 
-// Blob state
+// ============================================================================
+// ENHANCED LAVA LAMP CONFIGURATION
+// ============================================================================
+
+const MIN_BLOBS = 3
+const MAX_BLOBS = 8
+const BLOB_SPAWN_THRESHOLD = 0.6  // Energy level to spawn new blob
+const BLOB_DESPAWN_THRESHOLD = 0.15  // Energy level to remove blob
+
+// Physics constants
+const GRAVITY_BASE = 0.15
+const BUOYANCY_FACTOR = 0.3
+const COLLISION_RADIUS = 8
+const MERGE_DISTANCE = 5
+const SPLIT_VELOCITY = 0.8
+
+// ============================================================================
+// STATE
+// ============================================================================
+
 let blobs: MetaBlob[] = []
+let currentBlobCount = 5
+let lastSpawnTime = 0
+let lastDespawnTime = 0
+let gravityDirection = 1  // 1 = up (normal), -1 = down
 
 // Scene object references
 let quadMesh: THREE.Mesh | null = null
 let shaderMaterial: THREE.ShaderMaterial | null = null
 
+// ============================================================================
+// PHYSICS FUNCTIONS
+// ============================================================================
+
+// Check and handle blob collisions
+function handleCollisions(blobs: MetaBlob[], dt: number): void {
+  for (let i = 0; i < blobs.length; i++) {
+    for (let j = i + 1; j < blobs.length; j++) {
+      const dx = blobs[j].x - blobs[i].x
+      const dy = blobs[j].y - blobs[i].y
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      
+      const minDist = (blobs[i].baseSize + blobs[j].baseSize) * 0.6
+      
+      if (dist < minDist && dist > 0.1) {
+        // Blobs are overlapping - push them apart
+        const overlap = minDist - dist
+        const nx = dx / dist
+        const ny = dy / dist
+        
+        // Softer collision response
+        const pushStrength = overlap * 0.15
+        blobs[i].x -= nx * pushStrength
+        blobs[i].y -= ny * pushStrength
+        blobs[j].x += nx * pushStrength
+        blobs[j].y += ny * pushStrength
+        
+        // Transfer some velocity on collision
+        const avgVel = (blobs[i].velocity + blobs[j].velocity) * 0.5
+        blobs[i].velocity = blobs[i].velocity * 0.7 + avgVel * 0.3
+        blobs[j].velocity = blobs[j].velocity * 0.7 + avgVel * 0.3
+      }
+    }
+  }
+}
+
+// Apply gravity and buoyancy physics
+function applyPhysics(blob: MetaBlob, bands: AudioBands, dt: number): void {
+  // Gravity direction responds to bass - heavy bass inverts gravity temporarily
+  const effectiveGravity = gravityDirection * GRAVITY_BASE
+  
+  // Buoyancy based on blob size (bigger blobs rise slower)
+  const buoyancy = BUOYANCY_FACTOR / (blob.baseSize * 0.15)
+  
+  // Audio-reactive forces
+  const bassForce = bands.bassSmooth * 0.3 * gravityDirection
+  const beatKick = bands.beatIntensity * 0.5
+  
+  // Update velocity
+  blob.velocity += (buoyancy - effectiveGravity + bassForce) * dt
+  blob.velocity += beatKick * (Math.random() - 0.5)
+  
+  // Damping
+  blob.velocity *= 0.985
+  
+  // Apply velocity to position
+  blob.y += blob.velocity * dt * 60
+}
+
+// Initialize blobs with physics properties
+function initBlobs(count: number): MetaBlob[] {
+  const newBlobs: MetaBlob[] = []
+  
+  for (let i = 0; i < count; i++) {
+    newBlobs.push({
+      x: (Math.random() - 0.5) * 25,
+      y: (Math.random() - 0.5) * 35,
+      velocity: (Math.random() - 0.5) * 0.3,
+      phase: Math.random() * Math.PI * 2,
+      baseSize: 5 + Math.random() * 3,
+      colorIndex: i % 5,
+      colorPhase: i * 0.7
+    })
+  }
+  
+  return newBlobs
+}
+
+// Spawn a new blob
+function spawnBlob(): void {
+  if (blobs.length >= MAX_BLOBS) return
+  
+  // Spawn at bottom or top depending on gravity
+  const spawnY = gravityDirection > 0 ? -28 : 28
+  
+  blobs.push({
+    x: (Math.random() - 0.5) * 20,
+    y: spawnY,
+    velocity: gravityDirection * 0.4,
+    phase: Math.random() * Math.PI * 2,
+    baseSize: 4 + Math.random() * 3,
+    colorIndex: blobs.length % 5,
+    colorPhase: Math.random() * Math.PI * 2
+  })
+  
+  currentBlobCount = blobs.length
+}
+
+// Remove a blob (smallest one)
+function despawnBlob(): void {
+  if (blobs.length <= MIN_BLOBS) return
+  
+  // Find smallest blob
+  let smallestIdx = 0
+  let smallestSize = blobs[0].baseSize
+  
+  for (let i = 1; i < blobs.length; i++) {
+    if (blobs[i].baseSize < smallestSize) {
+      smallestSize = blobs[i].baseSize
+      smallestIdx = i
+    }
+  }
+  
+  // Shrink it out
+  blobs[smallestIdx].baseSize *= 0.8
+  
+  if (blobs[smallestIdx].baseSize < 2) {
+    blobs.splice(smallestIdx, 1)
+    currentBlobCount = blobs.length
+  }
+}
+
+// ============================================================================
+// VISUALIZATION EXPORT
+// ============================================================================
+
 export const lavaLamp: VisualizationMode = {
   id: 'lava_lamp',
   name: 'Lava Lamp',
-  description: 'Classic lava lamp with metaball rendering',
+  description: 'Physics-based lava lamp with collision detection and audio-reactive gravity',
   
-  // Hide default particles - we use shader-based rendering
   hideParticles: true,
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
-    // Initialize blob state
-    blobs = initLavaLampBlobs(5)
+    blobs = initBlobs(5)
+    currentBlobCount = 5
+    gravityDirection = 1
+    lastSpawnTime = 0
+    lastDespawnTime = 0
     
-    // Set particles off-screen (they're hidden but we still need to initialize)
     for (let i = 0; i < count; i++) {
       positions[i * 3] = 0
       positions[i * 3 + 1] = -1000
@@ -41,33 +190,32 @@ export const lavaLamp: VisualizationMode = {
   },
 
   createSceneObjects(scene: THREE.Scene): SceneObjects {
-    // Create fullscreen quad for metaball rendering
     const geometry = createFullscreenQuad()
     
-    // Create shader material
+    // Initialize uniform arrays for max blob count
+    const blobPositions = []
+    const blobSizes = []
+    const blobColors = []
+    
+    for (let i = 0; i < MAX_BLOBS; i++) {
+      blobPositions.push(new THREE.Vector3(0, 0, 0))
+      blobSizes.push(6)
+      blobColors.push(new THREE.Vector3(0.5, 0.5, 0.5))
+    }
+    
     shaderMaterial = new THREE.ShaderMaterial({
       vertexShader: metaballVertexShader,
       fragmentShader: lavaLampFragmentShader,
       uniforms: {
         uTime: { value: 0 },
         uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-        uBlobPositions: { value: [
-          new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(0, 0, 0),
-          new THREE.Vector3(0, 0, 0)
-        ]},
-        uBlobSizes: { value: [6, 6, 6, 6, 6] },
-        uBlobColors: { value: [
-          new THREE.Vector3(0.2, 0.9, 0.3),
-          new THREE.Vector3(0.95, 0.3, 0.5),
-          new THREE.Vector3(0.95, 0.5, 0.1),
-          new THREE.Vector3(0.2, 0.8, 0.9),
-          new THREE.Vector3(0.7, 0.3, 0.9)
-        ]},
+        uBlobPositions: { value: blobPositions },
+        uBlobSizes: { value: blobSizes },
+        uBlobColors: { value: blobColors },
+        uBlobCount: { value: currentBlobCount },
         uBassSmooth: { value: 0 },
-        uBeatIntensity: { value: 0 }
+        uBeatIntensity: { value: 0 },
+        uGravityDirection: { value: gravityDirection }
       },
       depthTest: false,
       depthWrite: false
@@ -75,12 +223,10 @@ export const lavaLamp: VisualizationMode = {
     
     quadMesh = new THREE.Mesh(geometry, shaderMaterial)
     quadMesh.frustumCulled = false
-    quadMesh.renderOrder = -1000 // Render behind everything
+    quadMesh.renderOrder = -1000
     
-    // Add to scene at camera position
     scene.add(quadMesh)
     
-    // Handle window resize
     const handleResize = () => {
       if (shaderMaterial) {
         shaderMaterial.uniforms.uResolution.value.set(
@@ -96,29 +242,57 @@ export const lavaLamp: VisualizationMode = {
       update: (bands: AudioBands, time: number) => {
         if (!shaderMaterial) return
         
-        // Animate blobs with lava lamp physics
+        const dt = 0.016
+        
+        // Dynamic blob count based on sustained energy
+        if (bands.overallSmooth > BLOB_SPAWN_THRESHOLD && time - lastSpawnTime > 2) {
+          spawnBlob()
+          lastSpawnTime = time
+        } else if (bands.overallSmooth < BLOB_DESPAWN_THRESHOLD && time - lastDespawnTime > 3) {
+          despawnBlob()
+          lastDespawnTime = time
+        }
+        
+        // Gravity direction responds to bass drops
+        // Strong bass makes blobs sink, absence makes them rise
+        if (bands.subBassSmooth > 0.6) {
+          gravityDirection = -0.5  // Blobs sink
+        } else if (bands.subBassSmooth < 0.2) {
+          gravityDirection = 1  // Normal rise
+        } else {
+          gravityDirection = 1 - bands.subBassSmooth * 1.5
+        }
+        
+        // Animate blobs with physics
         for (let i = 0; i < blobs.length; i++) {
           const blob = blobs[i]
           
-          // Vertical oscillation with audio influence
-          const verticalRange = 22 + bands.bassSmooth * 8
-          const targetY = Math.sin(time * 0.4 * (0.8 + i * 0.1) + blob.phase) * verticalRange
+          // Apply physics
+          applyPhysics(blob, bands, dt)
           
-          // Calculate velocity for stretching effect
-          const prevY = blob.y
-          blob.y += (targetY - blob.y) * 0.03
-          blob.velocity = (blob.y - prevY) * 2
+          // Horizontal drift with audio influence
+          const driftSpeed = 0.015 + bands.midSmooth * 0.025
+          blob.x += Math.sin(time * 0.25 + blob.phase * 1.5) * driftSpeed
           
-          // Horizontal drift
-          const driftSpeed = 0.02 + bands.midSmooth * 0.03
-          blob.x += Math.sin(time * 0.3 + blob.phase * 1.5) * driftSpeed
+          // Stereo-based horizontal movement
+          blob.x += bands.stereoBalance * 0.1 * (i % 2 === 0 ? 1 : -1)
           
-          // Keep blobs in bounds with soft wrapping
-          if (blob.x > 20) blob.x -= 40
-          if (blob.x < -20) blob.x += 40
+          // Keep in bounds with soft wrapping
+          if (blob.y > 30) {
+            blob.y = 30
+            blob.velocity *= -0.3
+          }
+          if (blob.y < -30) {
+            blob.y = -30
+            blob.velocity *= -0.3
+          }
+          if (blob.x > 18) blob.x = -18
+          if (blob.x < -18) blob.x = 18
           
           // Size varies with audio
-          const size = blob.baseSize + bands.bassSmooth * 3 + bands.beatIntensity * 2
+          const targetSize = blob.baseSize + bands.bassSmooth * 2.5 + bands.beatIntensity * 2
+          const currentSize = shaderMaterial.uniforms.uBlobSizes.value[i]
+          shaderMaterial.uniforms.uBlobSizes.value[i] = currentSize + (targetSize - currentSize) * 0.1
           
           // Update uniforms
           shaderMaterial.uniforms.uBlobPositions.value[i].set(
@@ -126,17 +300,21 @@ export const lavaLamp: VisualizationMode = {
             blob.y,
             blob.velocity
           )
-          shaderMaterial.uniforms.uBlobSizes.value[i] = size
           
           // Update color with cycling
           const color = getBlobColor(blob, time)
           shaderMaterial.uniforms.uBlobColors.value[i].set(color.r, color.g, color.b)
         }
         
+        // Handle collisions
+        handleCollisions(blobs, dt)
+        
         // Update other uniforms
         shaderMaterial.uniforms.uTime.value = time
+        shaderMaterial.uniforms.uBlobCount.value = blobs.length
         shaderMaterial.uniforms.uBassSmooth.value = bands.bassSmooth
         shaderMaterial.uniforms.uBeatIntensity.value = bands.beatIntensity
+        shaderMaterial.uniforms.uGravityDirection.value = gravityDirection
       },
       dispose: () => {
         window.removeEventListener('resize', handleResize)
@@ -160,8 +338,6 @@ export const lavaLamp: VisualizationMode = {
     _bands: AudioBands,
     _time: number
   ) {
-    // Main rendering is done in createSceneObjects.update
-    // Keep particles hidden
     for (let i = 0; i < count; i++) {
       sizes[i] = 0
     }

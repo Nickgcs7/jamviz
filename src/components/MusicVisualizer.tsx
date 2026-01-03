@@ -7,7 +7,7 @@ import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import { RGBShiftShader } from 'three/addons/shaders/RGBShiftShader.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
-import { AudioAnalyzer, type AudioBands } from '@/lib/AudioAnalyzer'
+import { AudioAnalyzer, type AudioBands, createDefaultAudioBands } from '@/lib/AudioAnalyzer'
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode, type SceneObjects } from '@/lib/visualizations'
 
@@ -238,12 +238,8 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       const sizes = particles.geometry.attributes.size.array as Float32Array
       const colors = particles.geometry.attributes.customColor.array as Float32Array
 
-      // Get audio data
-      let bands: AudioBands = { 
-        bass: 0, mid: 0, high: 0, overall: 0,
-        bassSmooth: 0, midSmooth: 0, highSmooth: 0, overallSmooth: 0,
-        isBeat: false, beatIntensity: 0
-      }
+      // Get audio data - use createDefaultAudioBands for type-safe default
+      let bands: AudioBands = createDefaultAudioBands()
       if (analyzerRef.current && isListening) {
         bands = analyzerRef.current.getBands()
       }

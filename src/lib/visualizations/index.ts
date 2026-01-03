@@ -7,6 +7,8 @@ import { lavaLamp } from './lavaLamp'
 import { ledMatrix } from './ledMatrix'
 import { warpField } from './warpField'
 import { yuleLog } from './yuleLog'
+import { radialSpectrum, setRadialMode, getRadialMode, setRadialGradient } from './radialSpectrum'
+import { spectrumAnalyzer, setSpectrumGradient, setSpectrumSmoothing } from './spectrumAnalyzer'
 
 export const visualizations = [
   waveField,
@@ -15,15 +17,29 @@ export const visualizations = [
   lavaLamp,
   ledMatrix,
   warpField,
-  yuleLog
+  yuleLog,
+  radialSpectrum,
+  spectrumAnalyzer
 ]
 
 // Re-export visualization control functions
 export {
+  // Wave Field / Terrain
   setTerrainMode,
   getTerrainMode,
   setTerrainGradient,
-  setSupernovaGradient
+  
+  // Supernova / Explosion
+  setSupernovaGradient,
+  
+  // Radial Spectrum
+  setRadialMode,
+  getRadialMode,
+  setRadialGradient,
+  
+  // Spectrum Analyzer
+  setSpectrumGradient,
+  setSpectrumSmoothing
 }
 
 // Re-export gradient system from parent

@@ -9,38 +9,24 @@ import {
   type MetaBlob
 } from './metaballUtils'
 
-// ============================================================================
-// ENHANCED LAVA LAMP CONFIGURATION
-// ============================================================================
-
 const MIN_BLOBS = 3
 const MAX_BLOBS = 8
-const BLOB_SPAWN_THRESHOLD = 0.6  // Energy level to spawn new blob
-const BLOB_DESPAWN_THRESHOLD = 0.15  // Energy level to remove blob
+const BLOB_SPAWN_THRESHOLD = 0.6
+const BLOB_DESPAWN_THRESHOLD = 0.15
 
-// Physics constants
-const GRAVITY_BASE = 0.15
-const BUOYANCY_FACTOR = 0.3
-
-// ============================================================================
-// STATE
-// ============================================================================
+// More responsive physics
+const GRAVITY_BASE = 0.08
+const BUOYANCY_FACTOR = 0.5
 
 let blobs: MetaBlob[] = []
 let currentBlobCount = 5
 let lastSpawnTime = 0
 let lastDespawnTime = 0
-let gravityDirection = 1  // 1 = up (normal), -1 = down
+let gravityDirection = 1
 
-// Scene object references
 let quadMesh: THREE.Mesh | null = null
 let shaderMaterial: THREE.ShaderMaterial | null = null
 
-// ============================================================================
-// PHYSICS FUNCTIONS
-// ============================================================================
-
-// Check and handle blob collisions
 function handleCollisions(blobList: MetaBlob[]): void {
   for (let i = 0; i < blobList.length; i++) {
     for (let j = i + 1; j < blobList.length; j++) {
@@ -51,19 +37,16 @@ function handleCollisions(blobList: MetaBlob[]): void {
       const minDist = (blobList[i].baseSize + blobList[j].baseSize) * 0.6
       
       if (dist < minDist && dist > 0.1) {
-        // Blobs are overlapping - push them apart
         const overlap = minDist - dist
         const nx = dx / dist
         const ny = dy / dist
         
-        // Softer collision response
         const pushStrength = overlap * 0.15
         blobList[i].x -= nx * pushStrength
         blobList[i].y -= ny * pushStrength
         blobList[j].x += nx * pushStrength
         blobList[j].y += ny * pushStrength
         
-        // Transfer some velocity on collision
         const avgVel = (blobList[i].velocity + blobList[j].velocity) * 0.5
         blobList[i].velocity = blobList[i].velocity * 0.7 + avgVel * 0.3
         blobList[j].velocity = blobList[j].velocity * 0.7 + avgVel * 0.3
@@ -72,30 +55,30 @@ function handleCollisions(blobList: MetaBlob[]): void {
   }
 }
 
-// Apply gravity and buoyancy physics
 function applyPhysics(blob: MetaBlob, bands: AudioBands, dt: number): void {
-  // Gravity direction responds to bass - heavy bass inverts gravity temporarily
+  // More responsive to audio
+  const audioForce = (bands.bassSmooth * 0.6 + bands.midSmooth * 0.3 + bands.beatIntensity * 0.8) * gravityDirection
+  const buoyancy = BUOYANCY_FACTOR / (blob.baseSize * 0.15)
   const effectiveGravity = gravityDirection * GRAVITY_BASE
   
-  // Buoyancy based on blob size (bigger blobs rise slower)
-  const buoyancy = BUOYANCY_FACTOR / (blob.baseSize * 0.15)
+  // Stronger beat kicks
+  const beatKick = bands.beatIntensity * 0.8 * (Math.random() - 0.5)
   
-  // Audio-reactive forces
-  const bassForce = bands.bassSmooth * 0.3 * gravityDirection
-  const beatKick = bands.beatIntensity * 0.5
+  // Update velocity with audio reactivity
+  blob.velocity += (buoyancy - effectiveGravity + audioForce) * dt
+  blob.velocity += beatKick
   
-  // Update velocity
-  blob.velocity += (buoyancy - effectiveGravity + bassForce) * dt
-  blob.velocity += beatKick * (Math.random() - 0.5)
+  // Audio-reactive horizontal drift
+  const horizontalDrift = bands.stereoBalance * 0.4 * dt
+  blob.x += horizontalDrift
   
-  // Damping
-  blob.velocity *= 0.985
+  // Less damping for more lively movement
+  blob.velocity *= 0.98
   
-  // Apply velocity to position
+  // Apply velocity
   blob.y += blob.velocity * dt * 60
 }
 
-// Initialize blobs with physics properties
 function initBlobs(count: number): MetaBlob[] {
   const newBlobs: MetaBlob[] = []
   
@@ -114,17 +97,15 @@ function initBlobs(count: number): MetaBlob[] {
   return newBlobs
 }
 
-// Spawn a new blob
 function spawnBlob(): void {
   if (blobs.length >= MAX_BLOBS) return
   
-  // Spawn at bottom or top depending on gravity
   const spawnY = gravityDirection > 0 ? -28 : 28
   
   blobs.push({
     x: (Math.random() - 0.5) * 20,
     y: spawnY,
-    velocity: gravityDirection * 0.4,
+    velocity: gravityDirection * 0.6,
     phase: Math.random() * Math.PI * 2,
     baseSize: 4 + Math.random() * 3,
     colorIndex: blobs.length % 5,
@@ -134,11 +115,9 @@ function spawnBlob(): void {
   currentBlobCount = blobs.length
 }
 
-// Remove a blob (smallest one)
 function despawnBlob(): void {
   if (blobs.length <= MIN_BLOBS) return
   
-  // Find smallest blob
   let smallestIdx = 0
   let smallestSize = blobs[0].baseSize
   
@@ -149,7 +128,6 @@ function despawnBlob(): void {
     }
   }
   
-  // Shrink it out
   blobs[smallestIdx].baseSize *= 0.8
   
   if (blobs[smallestIdx].baseSize < 2) {
@@ -158,14 +136,10 @@ function despawnBlob(): void {
   }
 }
 
-// ============================================================================
-// VISUALIZATION EXPORT
-// ============================================================================
-
 export const lavaLamp: VisualizationMode = {
   id: 'lava_lamp',
   name: 'Lava Lamp',
-  description: 'Physics-based lava lamp with collision detection and audio-reactive gravity',
+  description: 'Audio-reactive lava lamp with physics-based blob movement',
   
   hideParticles: true,
 
@@ -189,7 +163,6 @@ export const lavaLamp: VisualizationMode = {
   createSceneObjects(scene: THREE.Scene): SceneObjects {
     const geometry = createFullscreenQuad()
     
-    // Initialize uniform arrays for max blob count
     const blobPositions = []
     const blobSizes = []
     const blobColors = []
@@ -241,7 +214,7 @@ export const lavaLamp: VisualizationMode = {
         
         const dt = 0.016
         
-        // Dynamic blob count based on sustained energy
+        // Dynamic blob spawning based on overall energy
         if (bands.overallSmooth > BLOB_SPAWN_THRESHOLD && time - lastSpawnTime > 2) {
           spawnBlob()
           lastSpawnTime = time
@@ -250,63 +223,66 @@ export const lavaLamp: VisualizationMode = {
           lastDespawnTime = time
         }
         
-        // Gravity direction responds to bass drops
-        // Strong bass makes blobs sink, absence makes them rise
-        if (bands.subBassSmooth > 0.6) {
-          gravityDirection = -0.5  // Blobs sink
-        } else if (bands.subBassSmooth < 0.2) {
-          gravityDirection = 1  // Normal rise
+        // Audio-reactive gravity direction
+        // Strong bass makes things heavier, absence makes them lighter
+        const bassInfluence = bands.bassSmooth + bands.subBassSmooth * 0.5
+        if (bassInfluence > 0.7) {
+          gravityDirection = -0.3  // Heavy bass pulls down
+        } else if (bassInfluence < 0.2) {
+          gravityDirection = 1.2  // Light floats up faster
         } else {
-          gravityDirection = 1 - bands.subBassSmooth * 1.5
+          gravityDirection = 1 - bassInfluence * 0.8
         }
         
-        // Animate blobs with physics
+        // Animate each blob
         for (let i = 0; i < blobs.length; i++) {
           const blob = blobs[i]
           
-          // Apply physics
+          // Apply physics with audio reactivity
           applyPhysics(blob, bands, dt)
           
-          // Horizontal drift with audio influence
-          const driftSpeed = 0.015 + bands.midSmooth * 0.025
-          blob.x += Math.sin(time * 0.25 + blob.phase * 1.5) * driftSpeed
+          // Audio-reactive horizontal movement
+          const driftSpeed = (0.02 + bands.midSmooth * 0.04 + bands.highSmooth * 0.03) * 60 * dt
+          blob.x += Math.sin(time * 0.3 + blob.phase * 1.5) * driftSpeed
           
-          // Stereo-based horizontal movement
-          blob.x += bands.stereoBalance * 0.1 * (i % 2 === 0 ? 1 : -1)
+          // Beat creates horizontal nudges
+          if (bands.isBeat) {
+            blob.x += (Math.random() - 0.5) * bands.beatIntensity * 3
+          }
           
-          // Keep in bounds with soft wrapping
+          // Boundary handling with bounce
           if (blob.y > 30) {
             blob.y = 30
-            blob.velocity *= -0.3
+            blob.velocity *= -0.4
           }
           if (blob.y < -30) {
             blob.y = -30
-            blob.velocity *= -0.3
+            blob.velocity *= -0.4
           }
           if (blob.x > 18) blob.x = -18
           if (blob.x < -18) blob.x = 18
           
-          // Size varies with audio
-          const targetSize = blob.baseSize + bands.bassSmooth * 2.5 + bands.beatIntensity * 2
+          // Audio-reactive size pulsing
+          const sizeBoost = bands.bassSmooth * 3 + bands.midSmooth * 1.5 + bands.beatIntensity * 4
+          const targetSize = blob.baseSize + sizeBoost
           const currentSize = shaderMaterial.uniforms.uBlobSizes.value[i]
-          shaderMaterial.uniforms.uBlobSizes.value[i] = currentSize + (targetSize - currentSize) * 0.1
+          shaderMaterial.uniforms.uBlobSizes.value[i] = currentSize + (targetSize - currentSize) * 0.15
           
-          // Update uniforms
+          // Update position uniforms
           shaderMaterial.uniforms.uBlobPositions.value[i].set(
             blob.x,
             blob.y,
             blob.velocity
           )
           
-          // Update color with cycling
+          // Update color
           const color = getBlobColor(blob, time)
           shaderMaterial.uniforms.uBlobColors.value[i].set(color.r, color.g, color.b)
         }
         
-        // Handle collisions
         handleCollisions(blobs)
         
-        // Update other uniforms
+        // Update global uniforms
         shaderMaterial.uniforms.uTime.value = time
         shaderMaterial.uniforms.uBlobCount.value = blobs.length
         shaderMaterial.uniforms.uBassSmooth.value = bands.bassSmooth

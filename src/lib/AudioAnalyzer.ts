@@ -55,33 +55,33 @@ export interface AudioBands {
   isBeat: boolean
   beatIntensity: number
   
-  // NEW: Extended frequency bands (0-1)
+  // Extended frequency bands (0-1)
   subBass: number      // 20-60Hz - rumble, sub drops
   lowMid: number       // 250-500Hz - body, warmth
   highMid: number      // 2000-4000Hz - presence, clarity
   treble: number       // 4000-8000Hz - brightness
   brilliance: number   // 8000-20000Hz - air, sparkle
   
-  // NEW: Smoothed extended bands
+  // Smoothed extended bands
   subBassSmooth: number
   lowMidSmooth: number
   highMidSmooth: number
   trebleSmooth: number
   brillianceSmooth: number
   
-  // NEW: Peak hold values (stay at max briefly, then decay)
+  // Peak hold values (stay at max briefly, then decay)
   bassPeak: number
   midPeak: number
   highPeak: number
   overallPeak: number
   
-  // NEW: Stereo balance (-1 = left, 0 = center, 1 = right)
+  // Stereo balance (-1 = left, 0 = center, 1 = right)
   stereoBalance: number
   
-  // NEW: Estimated BPM (0 if not enough data)
+  // Estimated BPM (0 if not enough data)
   estimatedBPM: number
   
-  // NEW: Energy in different presets (matching AudioMotion)
+  // Energy in different presets (matching AudioMotion)
   energy: {
     peak: number
     bass: number
@@ -89,6 +89,46 @@ export interface AudioBands {
     mid: number
     highMid: number
     treble: number
+  }
+}
+
+// Default/empty AudioBands for initialization
+export function createDefaultAudioBands(): AudioBands {
+  return {
+    bass: 0,
+    mid: 0,
+    high: 0,
+    overall: 0,
+    bassSmooth: 0,
+    midSmooth: 0,
+    highSmooth: 0,
+    overallSmooth: 0,
+    isBeat: false,
+    beatIntensity: 0,
+    subBass: 0,
+    lowMid: 0,
+    highMid: 0,
+    treble: 0,
+    brilliance: 0,
+    subBassSmooth: 0,
+    lowMidSmooth: 0,
+    highMidSmooth: 0,
+    trebleSmooth: 0,
+    brillianceSmooth: 0,
+    bassPeak: 0,
+    midPeak: 0,
+    highPeak: 0,
+    overallPeak: 0,
+    stereoBalance: 0,
+    estimatedBPM: 0,
+    energy: {
+      peak: 0,
+      bass: 0,
+      lowMid: 0,
+      mid: 0,
+      highMid: 0,
+      treble: 0
+    }
   }
 }
 

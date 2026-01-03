@@ -1,7 +1,7 @@
 export type { VisualizationMode, SceneObjects } from './types'
 
-import { waveField } from './waveField'
-import { explosion } from './explosion'
+import { waveField, setTerrainMode, getTerrainMode, setTerrainGradient } from './waveField'
+import { explosion, setSupernovaGradient } from './explosion'
 import { laserArray } from './laserArray'
 import { lavaLamp } from './lavaLamp'
 import { ledMatrix } from './ledMatrix'
@@ -17,3 +17,14 @@ export const visualizations = [
   warpField,
   yuleLog
 ]
+
+// Re-export visualization control functions
+export {
+  setTerrainMode,
+  getTerrainMode,
+  setTerrainGradient,
+  setSupernovaGradient
+}
+
+// Re-export gradient system from parent
+export * from '../gradients'

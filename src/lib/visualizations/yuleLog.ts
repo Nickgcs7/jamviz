@@ -1,5 +1,6 @@
 import type { VisualizationMode } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
+import { createDefaultAudioBands } from '../AudioAnalyzer'
 import { hslToRgb } from '../colorUtils'
 
 // Flame configuration
@@ -167,12 +168,9 @@ export const yuleLog: VisualizationMode = {
       })
     }
     
-    // Initialize spark particles
-    const defaultBands: AudioBands = {
-      bass: 0, mid: 0, high: 0, overall: 0,
-      bassSmooth: 0, midSmooth: 0, highSmooth: 0, overallSmooth: 0.3,
-      isBeat: false, beatIntensity: 0
-    }
+    // Initialize spark particles with default bands
+    const defaultBands = createDefaultAudioBands()
+    defaultBands.overallSmooth = 0.3
     
     for (let i = 0; i < RISING_SPARK_PARTICLES; i++) {
       const spark = spawnSpark(defaultBands, (Math.random() - 0.5) * FLAME_WIDTH * 0.5)

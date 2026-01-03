@@ -1,6 +1,11 @@
-import type { VisualizationMode } from './types'
+import type { VisualizationMode, SceneObjects } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 import { hslToRgb, getCyclingHue } from '../colorUtils'
+import * as THREE from 'three'
+
+// ============================================================================
+// LED MATRIX CONFIGURATION
+// ============================================================================
 
 // 5x7 bitmap font for uppercase letters, numbers, and common punctuation
 const FONT: Record<string, number[]> = {
@@ -75,31 +80,63 @@ const FONT: Record<string, number[]> = {
 }
 
 // Matrix dimensions
-const GRID_X = 64  // Wide display for text scrolling
-const GRID_Y = 14  // Double height for better text rendering (7 row font * 2)
+const GRID_X = 64
+const GRID_Y = 14
 const TOTAL_PIXELS = GRID_X * GRID_Y
 const CHAR_WIDTH = 5
 const CHAR_HEIGHT = 7
 const CHAR_SPACING = 1
-const SCROLL_SPEED = 15  // Pixels per second
 
-// Current display state
+// Display modes
+type DisplayMode = 'text' | 'spectrum' | 'hybrid'
+let displayMode: DisplayMode = 'text'
+
+// LED appearance settings (matching AudioMotion setLedParams)
+interface LedParams {
+  maxLeds: number
+  spaceH: number  // Horizontal gap ratio
+  spaceV: number  // Vertical gap ratio
+  glowSize: number
+  glowIntensity: number
+}
+
+const ledParams: LedParams = {
+  maxLeds: TOTAL_PIXELS,
+  spaceH: 0.15,
+  spaceV: 0.15,
+  glowSize: 2.5,
+  glowIntensity: 0.6
+}
+
+// Current state
 let displayText = 'JAMVIZ'
 let scrollOffset = 0
 let textBitmap: boolean[][] = []
+let scrollSpeed = 12
 
-// Pre-calculate text bitmap for efficient scrolling
+// Spectrum analyzer state
+const spectrumBars = new Float32Array(GRID_X)
+const spectrumPeaks = new Float32Array(GRID_X)
+const peakHoldTimes = new Float32Array(GRID_X)
+
+// Glow effect meshes
+let glowGeometry: THREE.BufferGeometry | null = null
+let glowMaterial: THREE.PointsMaterial | null = null
+let glowPoints: THREE.Points | null = null
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 function generateTextBitmap(text: string): boolean[][] {
   const upperText = text.toUpperCase()
   const totalWidth = upperText.length * (CHAR_WIDTH + CHAR_SPACING)
   const bitmap: boolean[][] = []
   
-  // Initialize bitmap
   for (let y = 0; y < CHAR_HEIGHT; y++) {
     bitmap[y] = new Array(totalWidth).fill(false)
   }
   
-  // Render each character
   let xOffset = 0
   for (const char of upperText) {
     const charData = FONT[char] || FONT[' ']
@@ -117,20 +154,14 @@ function generateTextBitmap(text: string): boolean[][] {
   return bitmap
 }
 
-// Check if pixel should be lit based on text position
-function isPixelLit(gridX: number, gridY: number): boolean {
+function isTextPixelLit(gridX: number, gridY: number): boolean {
   if (textBitmap.length === 0) return false
   
-  // Map grid position to text bitmap position
-  // Center text vertically and handle scrolling horizontally
   const bitmapWidth = textBitmap[0]?.length || 0
   const displayWidth = GRID_X
   
-  // Calculate wrapped scroll position
   const scrollX = Math.floor(scrollOffset) % (bitmapWidth + displayWidth)
   const textX = gridX + scrollX - displayWidth
-  
-  // Map grid Y to font row (grid is 14 high, font is 7 high, so scale by 2)
   const fontRow = Math.floor(gridY / 2)
   
   if (textX >= 0 && textX < bitmapWidth && fontRow >= 0 && fontRow < CHAR_HEIGHT) {
@@ -140,37 +171,114 @@ function isPixelLit(gridX: number, gridY: number): boolean {
   return false
 }
 
+function getSpectrumHeight(gridX: number, bands: AudioBands): number {
+  // Map grid columns to frequency spectrum
+  // Using log scale for more musical response
+  const normalizedX = gridX / GRID_X
+  const logX = Math.pow(normalizedX, 0.7) // Compress higher frequencies
+  
+  // Interpolate between frequency bands
+  let value: number
+  if (logX < 0.15) {
+    // Sub-bass to bass
+    value = bands.subBassSmooth * (1 - logX / 0.15) + bands.bassSmooth * (logX / 0.15)
+  } else if (logX < 0.3) {
+    // Bass to low-mid
+    const t = (logX - 0.15) / 0.15
+    value = bands.bassSmooth * (1 - t) + bands.lowMidSmooth * t
+  } else if (logX < 0.5) {
+    // Low-mid to mid
+    const t = (logX - 0.3) / 0.2
+    value = bands.lowMidSmooth * (1 - t) + bands.midSmooth * t
+  } else if (logX < 0.7) {
+    // Mid to high-mid
+    const t = (logX - 0.5) / 0.2
+    value = bands.midSmooth * (1 - t) + bands.highMidSmooth * t
+  } else if (logX < 0.85) {
+    // High-mid to treble
+    const t = (logX - 0.7) / 0.15
+    value = bands.highMidSmooth * (1 - t) + bands.trebleSmooth * t
+  } else {
+    // Treble to brilliance
+    const t = (logX - 0.85) / 0.15
+    value = bands.trebleSmooth * (1 - t) + bands.brillianceSmooth * t
+  }
+  
+  return value
+}
+
+function updateSpectrumBars(bands: AudioBands, dt: number) {
+  for (let x = 0; x < GRID_X; x++) {
+    const targetHeight = getSpectrumHeight(x, bands)
+    
+    // Fast attack, slower decay
+    if (targetHeight > spectrumBars[x]) {
+      spectrumBars[x] += (targetHeight - spectrumBars[x]) * 0.4
+    } else {
+      spectrumBars[x] += (targetHeight - spectrumBars[x]) * 0.15
+    }
+    
+    // Peak hold and decay
+    if (spectrumBars[x] >= spectrumPeaks[x]) {
+      spectrumPeaks[x] = spectrumBars[x]
+      peakHoldTimes[x] = 500 // ms
+    } else {
+      peakHoldTimes[x] -= dt * 1000
+      if (peakHoldTimes[x] <= 0) {
+        spectrumPeaks[x] *= 0.95 // Decay
+      }
+    }
+  }
+}
+
+function isSpectrumPixelLit(gridX: number, gridY: number): boolean {
+  const barHeight = spectrumBars[gridX] * GRID_Y
+  const invertedY = GRID_Y - 1 - gridY // Bars grow upward
+  return invertedY < barHeight
+}
+
+function isPeakPixelLit(gridX: number, gridY: number): boolean {
+  const peakRow = Math.floor(spectrumPeaks[gridX] * (GRID_Y - 1))
+  const invertedY = GRID_Y - 1 - gridY
+  return invertedY === peakRow && spectrumPeaks[gridX] > 0.05
+}
+
+// ============================================================================
+// VISUALIZATION EXPORT
+// ============================================================================
+
 export const ledMatrix: VisualizationMode = {
   id: 'led_matrix',
   name: 'LED Matrix',
-  description: 'Times Square style LED wall with scrolling text',
+  description: 'Times Square style LED wall with spectrum analyzer and scrolling text',
   
-  // Text configuration for UI
   textConfig: {
     enabled: true,
     placeholder: 'Enter text to display...',
     defaultText: 'JAMVIZ'
   },
   
-  // Method to update displayed text
   setText(text: string) {
     displayText = text || 'JAMVIZ'
     textBitmap = generateTextBitmap(displayText)
-    scrollOffset = 0  // Reset scroll when text changes
+    scrollOffset = 0
   },
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
-    // Initialize text bitmap
     textBitmap = generateTextBitmap(displayText)
     scrollOffset = 0
+    displayMode = 'text'
     
-    // Calculate pixels per LED to fill the particle count
+    // Reset spectrum state
+    spectrumBars.fill(0)
+    spectrumPeaks.fill(0)
+    peakHoldTimes.fill(0)
+    
     const pixelsPerLed = Math.floor(count / TOTAL_PIXELS)
-    const ledSize = 1.0  // Size of each LED pixel
-    const gapSize = 0.15  // Gap between LEDs
+    const ledSize = 1.0
+    const gapSize = ledParams.spaceH
     const totalLedSize = ledSize + gapSize
     
-    // Center the grid
     const offsetX = (GRID_X * totalLedSize) / 2
     const offsetY = (GRID_Y * totalLedSize) / 2
     
@@ -179,22 +287,152 @@ export const ledMatrix: VisualizationMode = {
       const gridX = ledIndex % GRID_X
       const gridY = Math.floor(ledIndex / GRID_X)
       
-      // Position within LED (create rectangular pixel effect)
       const localIndex = i % pixelsPerLed
       const localCols = Math.ceil(Math.sqrt(pixelsPerLed))
       const localX = (localIndex % localCols) / localCols * ledSize - ledSize / 2
       const localY = Math.floor(localIndex / localCols) / localCols * ledSize - ledSize / 2
       
-      // World position
       positions[i * 3] = gridX * totalLedSize - offsetX + localX + ledSize / 2
-      positions[i * 3 + 1] = (GRID_Y - 1 - gridY) * totalLedSize - offsetY + localY + ledSize / 2  // Flip Y
-      positions[i * 3 + 2] = 0  // Flat wall
+      positions[i * 3 + 1] = (GRID_Y - 1 - gridY) * totalLedSize - offsetY + localY + ledSize / 2
+      positions[i * 3 + 2] = 0
       
-      // Initial dim color
       const [r, g, b] = hslToRgb(0.55, 0.7, 0.1)
       colors[i * 3] = r
       colors[i * 3 + 1] = g
       colors[i * 3 + 2] = b
+    }
+  },
+
+  createSceneObjects(scene: THREE.Scene): SceneObjects {
+    // Create glow layer behind LEDs
+    const glowCount = TOTAL_PIXELS
+    const glowPositions = new Float32Array(glowCount * 3)
+    const glowColors = new Float32Array(glowCount * 3)
+    
+    const ledSize = 1.0
+    const gapSize = ledParams.spaceH
+    const totalLedSize = ledSize + gapSize
+    const offsetX = (GRID_X * totalLedSize) / 2
+    const offsetY = (GRID_Y * totalLedSize) / 2
+    
+    for (let i = 0; i < glowCount; i++) {
+      const gridX = i % GRID_X
+      const gridY = Math.floor(i / GRID_X)
+      
+      glowPositions[i * 3] = gridX * totalLedSize - offsetX + ledSize / 2
+      glowPositions[i * 3 + 1] = (GRID_Y - 1 - gridY) * totalLedSize - offsetY + ledSize / 2
+      glowPositions[i * 3 + 2] = -0.5 // Slightly behind
+      
+      glowColors[i * 3] = 0
+      glowColors[i * 3 + 1] = 0
+      glowColors[i * 3 + 2] = 0
+    }
+    
+    glowGeometry = new THREE.BufferGeometry()
+    glowGeometry.setAttribute('position', new THREE.BufferAttribute(glowPositions, 3))
+    glowGeometry.setAttribute('color', new THREE.BufferAttribute(glowColors, 3))
+    
+    glowMaterial = new THREE.PointsMaterial({
+      size: ledParams.glowSize,
+      vertexColors: true,
+      transparent: true,
+      opacity: ledParams.glowIntensity,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true
+    })
+    
+    glowPoints = new THREE.Points(glowGeometry, glowMaterial)
+    scene.add(glowPoints)
+    
+    let lastModeSwitch = 0
+    
+    return {
+      objects: [glowPoints],
+      update: (bands: AudioBands, time: number) => {
+        if (!glowGeometry) return
+        
+        const colAttr = glowGeometry.getAttribute('color') as THREE.BufferAttribute
+        const glowCol = colAttr.array as Float32Array
+        const cycleHue = getCyclingHue(time)
+        
+        // Auto-switch display mode based on audio
+        // Switch to spectrum on sustained high energy, back to text when quiet
+        if (bands.overallSmooth > 0.5 && time - lastModeSwitch > 3) {
+          if (displayMode === 'text') {
+            displayMode = 'hybrid'
+            lastModeSwitch = time
+          }
+        } else if (bands.overallSmooth < 0.15 && displayMode !== 'text' && time - lastModeSwitch > 5) {
+          displayMode = 'text'
+          lastModeSwitch = time
+        }
+        
+        // Sync scroll speed to BPM if available
+        if (bands.estimatedBPM > 0) {
+          scrollSpeed = bands.estimatedBPM / 8 // Roughly 1 char per beat at 120bpm
+        }
+        
+        // Update glow colors
+        for (let i = 0; i < TOTAL_PIXELS; i++) {
+          const gridX = i % GRID_X
+          const gridY = Math.floor(i / GRID_X)
+          
+          let isLit = false
+          let isPeak = false
+          let intensity = 0
+          
+          switch (displayMode) {
+            case 'text':
+              isLit = isTextPixelLit(gridX, gridY)
+              intensity = isLit ? 0.7 + bands.overallSmooth * 0.3 : 0.05
+              break
+              
+            case 'spectrum':
+              isLit = isSpectrumPixelLit(gridX, gridY)
+              isPeak = isPeakPixelLit(gridX, gridY)
+              intensity = isPeak ? 1.0 : (isLit ? 0.6 + bands.beatIntensity * 0.3 : 0.03)
+              break
+              
+            case 'hybrid':
+              const textLit = isTextPixelLit(gridX, gridY)
+              const specLit = isSpectrumPixelLit(gridX, gridY)
+              isPeak = isPeakPixelLit(gridX, gridY)
+              isLit = textLit || specLit
+              // Text is brighter than spectrum
+              intensity = isPeak ? 1.0 : (textLit ? 0.8 : (specLit ? 0.5 : 0.03))
+              break
+          }
+          
+          // Color based on position and mode
+          let hue: number
+          if (displayMode === 'spectrum' || (displayMode === 'hybrid' && !isTextPixelLit(gridX, gridY))) {
+            // Spectrum: color by frequency (column position)
+            hue = gridX / GRID_X * 0.3 + cycleHue
+          } else {
+            // Text: uniform color cycling
+            hue = cycleHue + gridX * 0.003
+          }
+          
+          // Peak pixels are white/bright
+          const saturation = isPeak ? 0.3 : 0.85
+          const lightness = isLit ? Math.min(0.7, intensity * 0.6) : 0.02
+          
+          const [r, g, b] = hslToRgb(hue, saturation, lightness)
+          glowCol[i * 3] = r * intensity
+          glowCol[i * 3 + 1] = g * intensity
+          glowCol[i * 3 + 2] = b * intensity
+        }
+        
+        colAttr.needsUpdate = true
+      },
+      dispose: () => {
+        if (glowGeometry) glowGeometry.dispose()
+        if (glowMaterial) glowMaterial.dispose()
+        if (glowPoints) scene.remove(glowPoints)
+        glowGeometry = null
+        glowMaterial = null
+        glowPoints = null
+      }
     }
   },
 
@@ -207,15 +445,19 @@ export const ledMatrix: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
-    // Update scroll position
+    const dt = 0.016
+    
+    // Update scroll position with BPM-synced speed
     const bitmapWidth = textBitmap[0]?.length || 0
     const scrollCycleWidth = bitmapWidth + GRID_X
-    scrollOffset += SCROLL_SPEED * 0.016 * (1 + bands.overallSmooth * 0.5)  // Audio affects scroll speed
+    scrollOffset += scrollSpeed * dt * (1 + bands.overallSmooth * 0.3)
     if (scrollOffset > scrollCycleWidth) {
       scrollOffset = 0
     }
     
-    // Get cycling hue
+    // Update spectrum bars
+    updateSpectrumBars(bands, dt)
+    
     const cycleHue = getCyclingHue(time)
     const beatPulse = bands.beatIntensity
     
@@ -226,40 +468,68 @@ export const ledMatrix: VisualizationMode = {
       const gridX = ledIndex % GRID_X
       const gridY = Math.floor(ledIndex / GRID_X)
       
-      // Check if this LED should be lit
-      const isLit = isPixelLit(gridX, gridY)
+      // Determine if LED is lit based on display mode
+      let isLit = false
+      let isPeak = false
       
-      // Audio-reactive brightness
-      let brightness = 0.05  // Base dim level for "off" LEDs
+      switch (displayMode) {
+        case 'text':
+          isLit = isTextPixelLit(gridX, gridY)
+          break
+        case 'spectrum':
+          isLit = isSpectrumPixelLit(gridX, gridY)
+          isPeak = isPeakPixelLit(gridX, gridY)
+          break
+        case 'hybrid':
+          isLit = isTextPixelLit(gridX, gridY) || isSpectrumPixelLit(gridX, gridY)
+          isPeak = isPeakPixelLit(gridX, gridY)
+          break
+      }
+      
+      // Calculate brightness
+      let brightness = 0.03
       let saturation = 0.6
       
       if (isLit) {
-        // Lit pixels get full brightness with audio reactivity
-        brightness = 0.5 + bands.overallSmooth * 0.3 + beatPulse * 0.2
-        saturation = 0.85
+        if (isPeak) {
+          brightness = 0.85 + beatPulse * 0.15
+          saturation = 0.3 // Peaks are whiter
+        } else {
+          brightness = 0.45 + bands.overallSmooth * 0.25 + beatPulse * 0.15
+          saturation = 0.85
+        }
         
-        // Add wave effect across lit pixels
-        const wave = Math.sin(gridX * 0.2 - time * 3) * 0.1
-        brightness += wave * bands.bassSmooth
+        // Wave effect across lit pixels
+        if (displayMode !== 'spectrum') {
+          const wave = Math.sin(gridX * 0.15 - time * 2.5) * 0.08
+          brightness += wave * bands.bassSmooth
+        }
       } else {
         // Dim pixels subtly react to bass
-        brightness += bands.bassSmooth * 0.03
+        brightness += bands.bassSmooth * 0.02
       }
       
-      // Hue shifts with position and time
-      const hue = cycleHue + gridX * 0.005 + (isLit ? bands.highSmooth * 0.1 : 0)
+      // Hue calculation
+      let hue: number
+      if (displayMode === 'spectrum' || (displayMode === 'hybrid' && isSpectrumPixelLit(gridX, gridY) && !isTextPixelLit(gridX, gridY))) {
+        // Spectrum bars: color by frequency position
+        hue = (gridX / GRID_X) * 0.35 + cycleHue
+      } else {
+        // Text: cycling hue with subtle position variation
+        hue = cycleHue + gridX * 0.004 + (isLit ? bands.highSmooth * 0.08 : 0)
+      }
       
       // Size based on brightness
-      sizes[i] = isLit ? 2.5 + beatPulse * 0.5 : 1.8
+      sizes[i] = isLit ? (isPeak ? 3.2 : 2.6 + beatPulse * 0.4) : 1.8
       
       // Color
-      const lightness = Math.min(0.6, brightness)
+      const lightness = Math.min(0.65, brightness)
       const [r, g, b] = hslToRgb(hue, saturation, lightness)
       colors[i * 3] = r
       colors[i * 3 + 1] = g
       colors[i * 3 + 2] = b
       
-      // Keep flat (no Z movement)
+      // Keep flat
       positions[i * 3 + 2] = 0
     }
   }

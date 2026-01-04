@@ -1,6 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import {
-  setLavaLampConfig,
   getLavaLampConfig,
   setLavaLampBlobs,
   setLavaLampMovement,
@@ -22,11 +21,6 @@ interface LavaLampControlsProps {
 export default function LavaLampControls({ visible, onClose }: LavaLampControlsProps) {
   const [config, setConfig] = useState<LavaLampConfig>(getLavaLampConfig())
   const [activeTab, setActiveTab] = useState<'blobs' | 'movement' | 'physics' | 'color'>('blobs')
-
-  const updateConfig = useCallback((updates: Partial<LavaLampConfig>) => {
-    setLavaLampConfig(updates)
-    setConfig(getLavaLampConfig())
-  }, [])
 
   if (!visible) return null
 

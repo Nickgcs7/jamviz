@@ -14,21 +14,25 @@ export interface LavaLampConfig {
   colorCycleSpeed: number; smoothingFactor: number
 }
 
-// Fallback gradient in case builtInGradients isn't ready
+// Fallback gradient in case builtInGradients isn't ready - using correct ColorStop format
 const FALLBACK_GRADIENT: GradientPreset = {
   name: 'lavaLamp',
+  bgColor: '#1a0500',
   colorStops: [
-    { position: 0, color: [1, 0.2, 0.1] },
-    { position: 0.25, color: [1, 0.5, 0] },
-    { position: 0.5, color: [1, 0.8, 0.2] },
-    { position: 0.75, color: [1, 0.4, 0.1] },
-    { position: 1, color: [0.8, 0.1, 0.2] }
+    { color: '#ff3300', pos: 0 },
+    { color: '#ff8000', pos: 0.25 },
+    { color: '#ffcc33', pos: 0.5 },
+    { color: '#ff6600', pos: 0.75 },
+    { color: '#cc1933', pos: 1 }
   ]
 }
 
 function getDefaultGradient(): GradientPreset {
   if (builtInGradients && builtInGradients.lavaLamp && builtInGradients.lavaLamp.colorStops) {
     return builtInGradients.lavaLamp
+  }
+  if (builtInGradients && builtInGradients.fire && builtInGradients.fire.colorStops) {
+    return builtInGradients.fire
   }
   return FALLBACK_GRADIENT
 }
@@ -60,8 +64,8 @@ function ensureValidGradient(): GradientPreset {
     return config.gradient
   }
   // Try to get from builtInGradients
-  if (builtInGradients && builtInGradients.lavaLamp && builtInGradients.lavaLamp.colorStops) {
-    config.gradient = builtInGradients.lavaLamp
+  if (builtInGradients && builtInGradients.fire && builtInGradients.fire.colorStops) {
+    config.gradient = builtInGradients.fire
     return config.gradient
   }
   // Use fallback

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   setSauronsEyeConfig,
   getSauronsEyeConfig,
@@ -22,6 +22,14 @@ interface SauronsEyeControlsProps {
 export default function SauronsEyeControls({ visible, onClose }: SauronsEyeControlsProps) {
   const [config, setConfig] = useState<SauronsEyeConfig>(getSauronsEyeConfig())
   const [activeTab, setActiveTab] = useState<'eye' | 'beam' | 'color' | 'effects'>('eye')
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   const updateConfig = useCallback((updates: Partial<SauronsEyeConfig>) => {
     setSauronsEyeConfig(updates)
@@ -32,26 +40,31 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
 
   const gradientNames = Object.keys(builtInGradients)
 
+  // Mobile: full screen overlay, Desktop: side panel
+  const panelClasses = isMobile 
+    ? "fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col"
+    : "absolute top-20 right-4 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden z-50"
+
   return (
-    <div className="absolute top-20 right-4 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden z-50">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+    <div className={panelClasses}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-orange-500 text-lg">🔥</span>
           <h3 className="text-white/90 font-medium text-sm">Sauron&apos;s Eye Settings</h3>
         </div>
-        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors p-2 -mr-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      <div className="flex border-b border-white/10">
+      <div className="flex border-b border-white/10 shrink-0">
         {(['eye', 'beam', 'color', 'effects'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 px-2 py-2 text-xs capitalize transition-colors ${
+            className={`flex-1 px-2 py-2.5 sm:py-2 text-xs capitalize transition-colors ${
               activeTab === tab
                 ? 'text-orange-400 border-b-2 border-orange-400 -mb-px'
                 : 'text-white/40 hover:text-white/70'
@@ -62,7 +75,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
         ))}
       </div>
 
-      <div className="p-4 space-y-4 max-h-80 overflow-y-auto">
+      <div className={`p-4 space-y-4 overflow-y-auto ${isMobile ? 'flex-1' : 'max-h-80'}`}>
         {activeTab === 'eye' && (
           <>
             <div className="space-y-2">
@@ -80,7 +93,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeGeometry({ eyeSize: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -99,7 +112,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeGeometry({ irisRings: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -117,7 +130,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeGeometry({ pupilWidth: parseInt(e.target.value) / 10 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -136,7 +149,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeGeometry({ pupilHeight: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -150,7 +163,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeEmbers({ embersEnabled: !config.embersEnabled })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className={`px-3 py-1 rounded text-xs transition-colors ${
+                  className={`px-3 py-2 sm:py-1 rounded text-xs transition-colors ${
                     config.embersEnabled
                       ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
                       : 'bg-white/5 text-white/40 border border-white/10'
@@ -175,7 +188,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeEmbers({ emberCount: parseInt(e.target.value) })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
 
@@ -193,7 +206,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeEmbers({ emberOrbitSpeed: parseInt(e.target.value) / 100 })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
             </div>
@@ -209,7 +222,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamEnabled: !config.beamEnabled })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className={`px-3 py-1 rounded text-xs transition-colors ${
+                className={`px-3 py-2 sm:py-1 rounded text-xs transition-colors ${
                   config.beamEnabled
                     ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
                     : 'bg-white/5 text-white/40 border border-white/10'
@@ -234,7 +247,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamLength: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -253,7 +266,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamWidth: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -271,7 +284,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamSweepRange: parseInt(e.target.value) * Math.PI / 180 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -289,7 +302,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamSweepSpeed: parseInt(e.target.value) / 100 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -307,7 +320,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamIntensity: parseInt(e.target.value) / 100 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -326,7 +339,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeBeam({ beamParticleCount: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
           </>
@@ -344,7 +357,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                       setSauronsEyeColorMode(mode)
                       setConfig(getSauronsEyeConfig())
                     }}
-                    className={`px-2 py-1.5 rounded text-xs capitalize transition-colors ${
+                    className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
                       config.colorMode === mode
                         ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
                         : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
@@ -358,7 +371,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
 
             <div className="space-y-2">
               <label className="text-white/60 text-xs">Gradient</label>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2 max-h-40 sm:max-h-32 overflow-y-auto">
                 {gradientNames.map((name) => (
                   <button
                     key={name}
@@ -366,7 +379,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                       setSauronsEyeGradient(builtInGradients[name])
                       setConfig(getSauronsEyeConfig())
                     }}
-                    className={`px-2 py-1.5 rounded text-xs capitalize transition-colors ${
+                    className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
                       config.gradient.name === builtInGradients[name].name
                         ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
                         : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
@@ -391,7 +404,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                 onChange={(e) => {
                   updateConfig({ colorCycleSpeed: parseInt(e.target.value) / 100 })
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -409,7 +422,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeAnimation({ glowIntensity: parseInt(e.target.value) / 100 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
           </>
@@ -431,7 +444,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeAnimation({ swirlSpeed: parseInt(e.target.value) / 100 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -449,7 +462,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                   setSauronsEyeAnimation({ pulseSpeed: parseInt(e.target.value) / 10 })
                   setConfig(getSauronsEyeConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
@@ -470,7 +483,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeAudioResponse({ beatReactivity: parseInt(e.target.value) / 10 })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
 
@@ -488,7 +501,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeAudioResponse({ bassInfluence: parseInt(e.target.value) / 10 })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
 
@@ -506,7 +519,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeAudioResponse({ midInfluence: parseInt(e.target.value) / 10 })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
 
@@ -524,7 +537,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeAudioResponse({ highInfluence: parseInt(e.target.value) / 10 })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
 
@@ -542,7 +555,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                     setSauronsEyeAudioResponse({ smoothingFactor: parseInt(e.target.value) / 100 })
                     setConfig(getSauronsEyeConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
               </div>
             </div>
@@ -550,13 +563,13 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
         )}
       </div>
 
-      <div className="px-4 py-3 border-t border-white/10 bg-white/5">
+      <div className="px-4 py-3 border-t border-white/10 bg-white/5 shrink-0">
         <button
           onClick={() => {
             resetSauronsEyeConfig()
             setConfig(getSauronsEyeConfig())
           }}
-          className="w-full px-3 py-1.5 rounded bg-white/5 border border-white/10 text-white/60 text-xs hover:bg-white/10 hover:text-white/80 transition-colors"
+          className="w-full px-3 py-2 sm:py-1.5 rounded bg-white/5 border border-white/10 text-white/60 text-xs hover:bg-white/10 hover:text-white/80 transition-colors"
         >
           Reset to Defaults
         </button>

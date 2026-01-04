@@ -48,6 +48,8 @@ import {
   setRoadwayLineParams,
   setRoadwayEffects,
   setRoadwayAudioResponse,
+  setRoadwayRoadLines,
+  setRoadwayHorizonGlow,
   resetRoadwayConfig,
   type RoadwayConfig
 } from './roadway'
@@ -133,6 +135,8 @@ export {
   setRoadwayLineParams,
   setRoadwayEffects,
   setRoadwayAudioResponse,
+  setRoadwayRoadLines,
+  setRoadwayHorizonGlow,
   resetRoadwayConfig,
   type RoadwayConfig,
   

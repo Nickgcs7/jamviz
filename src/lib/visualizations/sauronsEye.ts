@@ -2,7 +2,6 @@ import type { VisualizationMode, SceneObjects } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
 import { getCyclingHue } from '../colorUtils'
 import { builtInGradients, sampleGradient, type GradientPreset } from '../gradients'
-import * as THREE from 'three'
 
 // ============================================================================
 // CONFIGURATION - Simplified Sauron's Eye
@@ -14,10 +13,10 @@ export interface SauronsEyeConfig {
   pupilWidth: number
   pupilHeight: number
 
-  // Beam configuration (thick glowing laser)
+  // Beam configuration (particle beam only)
   beamEnabled: boolean
   beamLength: number
-  beamWidth: number  // Thickness of the beam
+  beamWidth: number  // Spread/thickness of particle beam
   beamSweepRange: number
   beamSweepSpeed: number
   beamIntensity: number
@@ -55,7 +54,7 @@ const DEFAULT_CONFIG: SauronsEyeConfig = {
 
   beamEnabled: true,
   beamLength: 50,
-  beamWidth: 3,  // Thicker beam
+  beamWidth: 3,
   beamSweepRange: Math.PI * 0.35,
   beamSweepSpeed: 0.4,
   beamIntensity: 1.2,
@@ -90,7 +89,7 @@ let config: SauronsEyeConfig = { ...DEFAULT_CONFIG }
 
 const CORE_PARTICLES = 600      // Eye iris/core
 const PUPIL_PARTICLES = 150     // Dark pupil slit
-const BEAM_PARTICLES = 400      // Thick laser beam
+const BEAM_PARTICLES = 400      // Particle beam
 const ARM_PARTICLES = 2000      // Wavy tentacle arms
 const TOTAL_MANAGED = CORE_PARTICLES + PUPIL_PARTICLES + BEAM_PARTICLES + ARM_PARTICLES
 
@@ -104,10 +103,6 @@ let lastBeatTime = 0
 let eyeIntensity = 1
 let pupilDilation = 1
 
-// Beam mesh for thick glowing laser
-let beamMesh: THREE.Mesh | null = null
-let beamMaterial: THREE.MeshBasicMaterial | null = null
-
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
@@ -120,17 +115,6 @@ function getPupilShape(t: number, dilation: number): { x: number; y: number } {
     x: Math.sin(t * Math.PI * 2) * widthScale,
     y: Math.cos(t * Math.PI * 2) * heightScale * 0.5
   }
-}
-
-// Create thick cylindrical beam
-function createBeamGeometry(): THREE.CylinderGeometry {
-  return new THREE.CylinderGeometry(
-    config.beamWidth * 0.3,   // Top radius (slightly narrower)
-    config.beamWidth,          // Bottom radius
-    config.beamLength,         // Height
-    16,                        // Radial segments
-    1                          // Height segments
-  )
 }
 
 // ============================================================================
@@ -182,7 +166,7 @@ export const sauronsEye: VisualizationMode = {
       colors[particleIndex * 3 + 2] = 0.0
     }
 
-    // Initialize beam particles (thick laser)
+    // Initialize beam particles
     for (let i = 0; i < BEAM_PARTICLES; i++) {
       const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + i
       positions[particleIndex * 3] = 0
@@ -219,39 +203,10 @@ export const sauronsEye: VisualizationMode = {
     }
   },
 
-  createSceneObjects(scene: THREE.Scene): SceneObjects {
-    // Clean up existing beam
-    if (beamMesh) {
-      beamMesh.geometry.dispose()
-      scene.remove(beamMesh)
-      beamMesh = null
-    }
-    if (beamMaterial) {
-      beamMaterial.dispose()
-      beamMaterial = null
-    }
-
-    // Create thick glowing beam cylinder
-    if (config.beamEnabled) {
-      const beamGeometry = createBeamGeometry()
-      // Rotate so it points along Z axis and starts from origin
-      beamGeometry.rotateX(Math.PI / 2)
-      beamGeometry.translate(0, 0, -config.beamLength / 2)
-      
-      beamMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff6600,
-        transparent: true,
-        opacity: 0.7,
-        blending: THREE.AdditiveBlending
-      })
-      
-      beamMesh = new THREE.Mesh(beamGeometry, beamMaterial)
-      beamMesh.position.set(0, 0, 0)
-      scene.add(beamMesh)
-    }
-
+  createSceneObjects(): SceneObjects {
+    // No scene objects needed - everything is particles now
     return {
-      objects: beamMesh ? [beamMesh] : [],
+      objects: [],
       update: (bands: AudioBands, time: number) => {
         // Bass makes the eye more intense
         const targetIntensity = 0.7 + 
@@ -282,33 +237,9 @@ export const sauronsEye: VisualizationMode = {
         }
         
         beamAngle += (beamTargetAngle - beamAngle) * 0.06
-        
-        // Update beam mesh
-        if (beamMesh && beamMaterial) {
-          beamMesh.rotation.y = beamAngle
-          
-          // Pulsing intensity
-          const beamPulse = 0.5 + bands.bassSmooth * 0.3 + bands.beatIntensity * 0.2
-          beamMaterial.opacity = beamPulse * config.beamIntensity
-          
-          // Color from gradient
-          const temp = 0.2 + bands.bassSmooth * 0.3
-          const [r, g, b] = sampleGradient(config.gradient, temp)
-          beamMaterial.color.setRGB(r, g, b)
-          
-          // Scale beam width with bass
-          const scaleX = 1 + bands.bassSmooth * 0.5
-          beamMesh.scale.set(scaleX, scaleX, 1)
-        }
       },
       dispose: () => {
-        if (beamMesh) {
-          beamMesh.geometry.dispose()
-          scene.remove(beamMesh)
-        }
-        if (beamMaterial) beamMaterial.dispose()
-        beamMesh = null
-        beamMaterial = null
+        // Nothing to dispose
       }
     }
   },
@@ -375,7 +306,7 @@ export const sauronsEye: VisualizationMode = {
       sizes[particleIndex] = 3 + edgeFactor * 2
     }
 
-    // Animate beam particles (thick glowing laser)
+    // Animate beam particles (particle-only beam)
     if (config.beamEnabled) {
       for (let i = 0; i < BEAM_PARTICLES; i++) {
         const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + i

@@ -8,9 +8,8 @@ import * as THREE from 'three'
 // This redesign focuses on:
 // 1. RESTRAINED COLORS - Lock to palette, stop rainbow chaos
 // 2. WEIGHTED MOTION - Physics-based movement with inertia
-// 3. COMPOSITIONAL DEPTH - Background/midground/foreground layers
-// 4. SMOOTH CAMERA - Slow, cinematic movements
-// 5. NEGATIVE SPACE - Let the visualization breathe
+// 3. CLEAN COMPOSITION - Simple wireframe on black (like WMP)
+// 4. NEGATIVE SPACE - Let the visualization breathe
 // ============================================================================
 
 // ============================================================================
@@ -19,8 +18,6 @@ import * as THREE from 'three'
 
 interface ColorScheme {
   name: string
-  horizon: THREE.Color      // Sky color at horizon
-  zenith: THREE.Color       // Sky color overhead
   gridPrimary: THREE.Color  // Main grid lines
   gridAccent: THREE.Color   // Peak/highlight color
   ambient: number           // Ambient brightness 0-1
@@ -29,32 +26,24 @@ interface ColorScheme {
 const COLOR_SCHEMES: ColorScheme[] = [
   {
     name: 'Classic Synthwave',
-    horizon: new THREE.Color(0xff006e),    // Hot pink
-    zenith: new THREE.Color(0x0a0a1f),     // Deep purple-black
     gridPrimary: new THREE.Color(0xff006e), // Pink
     gridAccent: new THREE.Color(0x00f5ff),  // Cyan
     ambient: 0.15
   },
   {
     name: 'Sunset Drive',
-    horizon: new THREE.Color(0xff6b35),    // Orange
-    zenith: new THREE.Color(0x004e89),     // Deep blue
     gridPrimary: new THREE.Color(0xf77f00), // Amber
     gridAccent: new THREE.Color(0xffba08),  // Gold
     ambient: 0.2
   },
   {
     name: 'Arctic Night',
-    horizon: new THREE.Color(0x00d9ff),    // Ice cyan
-    zenith: new THREE.Color(0x001233),     // Deep blue-black
     gridPrimary: new THREE.Color(0x4cc9f0), // Sky blue
     gridAccent: new THREE.Color(0xf72585),  // Magenta accent
     ambient: 0.12
   },
   {
     name: 'Amber Glow',
-    horizon: new THREE.Color(0xff9500),    // Amber
-    zenith: new THREE.Color(0x1a0f0a),     // Dark brown-black
     gridPrimary: new THREE.Color(0xff6d00), // Orange
     gridAccent: new THREE.Color(0xffea00),  // Bright yellow
     ambient: 0.18
@@ -62,17 +51,16 @@ const COLOR_SCHEMES: ColorScheme[] = [
 ]
 
 let currentScheme = COLOR_SCHEMES[0]
-let schemeBlendFactor = 0 // For smooth scheme transitions
 
 // ============================================================================
-// GRID CONFIGURATION (Simplified, refined)
+// GRID CONFIGURATION
 // ============================================================================
 
 const GRID_WIDTH = 40
-const GRID_DEPTH = 40      // Reduced for cleaner look
+const GRID_DEPTH = 40
 const CELL_SIZE = 2.5
 const HORIZON_Y = 18
-const MAX_HEIGHT = 12      // Reduced for subtlety
+const MAX_HEIGHT = 12
 
 // Visualization modes (kept for compatibility)
 type TerrainMode = 'linear' | 'radial'
@@ -82,7 +70,6 @@ let currentMode: TerrainMode = 'linear'
 // MOTION DESIGN SYSTEM
 // ============================================================================
 
-// Physics-based motion state
 interface MotionState {
   position: number
   velocity: number
@@ -101,7 +88,6 @@ function updateSpring(
   damping: number = 0.85,
   _dt: number = 0.016
 ): number {
-  // Spring physics for smooth, weighted motion
   const force = (target - state.position) * springStrength
   state.acceleration = force / state.mass
   state.velocity = (state.velocity + state.acceleration) * damping
@@ -114,53 +100,15 @@ function updateSpring(
 // ============================================================================
 
 const terrainHeights: number[][] = []
-const heightMotion: MotionState[][] = [] // Physics for each vertex
+const heightMotion: MotionState[][] = []
 
 let lineGeometry: THREE.BufferGeometry | null = null
 let lineMaterial: THREE.LineBasicMaterial | null = null
 let lineSegments: THREE.LineSegments | null = null
 
-// Background gradient plane
-let bgGeometry: THREE.PlaneGeometry | null = null
-let bgMaterial: THREE.ShaderMaterial | null = null
-let bgMesh: THREE.Mesh | null = null
-
-// Musical memory for intelligent reactions
 let lastBeatTime = 0
-let energyHistory: number[] = new Array(60).fill(0) // 1 second history at 60fps
+let energyHistory: number[] = new Array(60).fill(0)
 let avgEnergy = 0
-
-// ============================================================================
-// BACKGROUND GRADIENT SHADER
-// ============================================================================
-
-const bgVertexShader = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`
-
-const bgFragmentShader = `
-  uniform vec3 horizonColor;
-  uniform vec3 zenithColor;
-  uniform float time;
-  uniform float energy;
-  varying vec2 vUv;
-  
-  void main() {
-    // Vertical gradient
-    float t = pow(vUv.y, 1.5);
-    vec3 color = mix(horizonColor, zenithColor, t);
-    
-    // Subtle pulse on beat
-    float pulse = energy * 0.15;
-    color += pulse;
-    
-    gl_FragColor = vec4(color, 1.0);
-  }
-`
 
 // ============================================================================
 // INITIALIZATION
@@ -175,7 +123,7 @@ function initTerrain() {
     heightMotion[z] = []
     for (let x = 0; x < GRID_WIDTH; x++) {
       terrainHeights[z][x] = 0
-      heightMotion[z][x] = createMotionState(0.8 + Math.random() * 0.4) // Varied mass
+      heightMotion[z][x] = createMotionState(0.8 + Math.random() * 0.4)
     }
   }
   
@@ -189,12 +137,10 @@ function initTerrain() {
 // ============================================================================
 
 function analyzeMusic(bands: AudioBands, time: number, _dt: number) {
-  // Track energy over time for intelligent reactions
   energyHistory.push(bands.overallSmooth)
   if (energyHistory.length > 60) energyHistory.shift()
   avgEnergy = energyHistory.reduce((a, b) => a + b) / energyHistory.length
   
-  // Detect actual musical beats (not just threshold crossings)
   const isBeat = bands.isBeat && (time - lastBeatTime) > 0.3
   if (isBeat) lastBeatTime = time
   
@@ -212,13 +158,13 @@ function analyzeMusic(bands: AudioBands, time: number, _dt: number) {
 
 function getPerspectiveY(baseY: number, z: number): number {
   const progress = z / GRID_DEPTH
-  const curve = Math.pow(progress, 1.8) // Steeper curve for drama
+  const curve = Math.pow(progress, 1.8)
   return baseY + (HORIZON_Y - baseY) * curve
 }
 
 function getPerspectiveScale(z: number): number {
   const progress = z / GRID_DEPTH
-  return 1 - progress * 0.75 // Stronger perspective
+  return 1 - progress * 0.75
 }
 
 // ============================================================================
@@ -235,7 +181,6 @@ export const waveField: VisualizationMode = {
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     initTerrain()
     
-    // Hide particles
     for (let i = 0; i < count; i++) {
       positions[i * 3] = 0
       positions[i * 3 + 1] = -200
@@ -249,36 +194,8 @@ export const waveField: VisualizationMode = {
   createSceneObjects(scene: THREE.Scene): SceneObjects {
     initTerrain()
     
-    // ========================================================================
-    // BACKGROUND GRADIENT PLANE
-    // ========================================================================
-    
-    bgGeometry = new THREE.PlaneGeometry(200, 100)
-    bgMaterial = new THREE.ShaderMaterial({
-      vertexShader: bgVertexShader,
-      fragmentShader: bgFragmentShader,
-      uniforms: {
-        horizonColor: { value: currentScheme.horizon },
-        zenithColor: { value: currentScheme.zenith },
-        time: { value: 0 },
-        energy: { value: 0 }
-      },
-      side: THREE.DoubleSide,
-      depthWrite: false
-    })
-    
-    bgMesh = new THREE.Mesh(bgGeometry, bgMaterial)
-    bgMesh.position.z = -60
-    bgMesh.position.y = 20
-    bgMesh.renderOrder = -1
-    scene.add(bgMesh)
-    
-    // ========================================================================
-    // GRID LINES
-    // ========================================================================
-    
     const horizontalSegments = (GRID_WIDTH - 1) * GRID_DEPTH
-    const verticalSegments = Math.floor((GRID_DEPTH - 1) * GRID_WIDTH / 2) // Fewer vertical lines
+    const verticalSegments = Math.floor((GRID_DEPTH - 1) * GRID_WIDTH / 2)
     const totalSegments = horizontalSegments + verticalSegments
     const vertexCount = totalSegments * 2
     
@@ -301,29 +218,17 @@ export const waveField: VisualizationMode = {
     scene.add(lineSegments)
     
     return {
-      objects: [lineSegments, bgMesh],
+      objects: [lineSegments],
       update: (bands: AudioBands, time: number) => {
-        if (!lineGeometry || !bgMaterial) return
+        if (!lineGeometry) return
         
         const dt = 0.016
         const music = analyzeMusic(bands, time, dt)
         
-        // ====================================================================
-        // UPDATE BACKGROUND
-        // ====================================================================
-        
-        bgMaterial.uniforms.time.value = time
-        bgMaterial.uniforms.energy.value = music.isBeat ? 1.0 : bands.beatIntensity * 0.5
-        
         // Subtle color shift based on average energy
         const schemeIndex = Math.floor(avgEnergy * COLOR_SCHEMES.length) % COLOR_SCHEMES.length
         if (COLOR_SCHEMES[schemeIndex] !== currentScheme) {
-          // Smooth transition between schemes
-          schemeBlendFactor += 0.01
-          if (schemeBlendFactor >= 1) {
-            currentScheme = COLOR_SCHEMES[schemeIndex]
-            schemeBlendFactor = 0
-          }
+          currentScheme = COLOR_SCHEMES[schemeIndex]
         }
         
         // ====================================================================
@@ -337,12 +242,10 @@ export const waveField: VisualizationMode = {
           const depthFactor = z / GRID_DEPTH
           
           for (let x = 0; x < GRID_WIDTH; x++) {
-            // Base terrain wave (slow, musical)
             const baseWave = Math.sin(x * 0.2 - time * 0.5) * 
                            Math.cos(z * 0.15 + time * 0.3) * 
                            MAX_HEIGHT * 0.4
             
-            // Bass creates expanding rings from center
             const distFromCenter = Math.sqrt(
               Math.pow(x - GRID_WIDTH/2, 2) + 
               Math.pow(z - GRID_DEPTH/2, 2)
@@ -350,24 +253,20 @@ export const waveField: VisualizationMode = {
             const ringPhase = distFromCenter * 0.3 - time * 2
             const bassRing = Math.sin(ringPhase) * music.bassWeight * MAX_HEIGHT * 0.5
             
-            // Melody creates traveling waves
             const melodyWave = Math.sin(x * 0.3 + time * 1.5) * 
                              music.melodyWeight * MAX_HEIGHT * 0.3
             
-            // Beat creates sharp spikes
             const beatHeight = music.isBeat ? 
               Math.exp(-Math.pow(distFromCenter - 10, 2) / 20) * MAX_HEIGHT * 0.6 : 0
             
-            // Combine with depth falloff
             const targetHeight = (baseWave + bassRing + melodyWave + beatHeight) * 
                                (1 - depthFactor * 0.7)
             
-            // Physics-based motion (spring system)
             terrainHeights[z][x] = updateSpring(
               heightMotion[z][x],
               targetHeight,
-              0.08,  // Spring strength
-              0.88,  // Damping
+              0.08,
+              0.88,
               dt
             )
           }
@@ -407,7 +306,6 @@ export const waveField: VisualizationMode = {
             pos[(vertexIndex + 1) * 3 + 1] = y2
             pos[(vertexIndex + 1) * 3 + 2] = -z * CELL_SIZE
             
-            // Color based on height (accent on peaks)
             const avgHeight = (h1 + h2) / 2
             const heightIntensity = Math.abs(avgHeight) / MAX_HEIGHT
             
@@ -432,8 +330,8 @@ export const waveField: VisualizationMode = {
           }
         }
         
-        // Vertical lines (fewer, for cleaner look)
-        const verticalSpacing = 2 // Only every 2nd line
+        // Vertical lines (fewer for cleaner look)
+        const verticalSpacing = 2
         for (let x = 0; x < GRID_WIDTH; x += verticalSpacing) {
           for (let z = 0; z < GRID_DEPTH - 1; z++) {
             const perspScale1 = getPerspectiveScale(z)
@@ -484,15 +382,9 @@ export const waveField: VisualizationMode = {
         if (lineGeometry) lineGeometry.dispose()
         if (lineMaterial) lineMaterial.dispose()
         if (lineSegments) scene.remove(lineSegments)
-        if (bgGeometry) bgGeometry.dispose()
-        if (bgMaterial) bgMaterial.dispose()
-        if (bgMesh) scene.remove(bgMesh)
         lineGeometry = null
         lineMaterial = null
         lineSegments = null
-        bgGeometry = null
-        bgMaterial = null
-        bgMesh = null
       }
     }
   },
@@ -506,7 +398,6 @@ export const waveField: VisualizationMode = {
     _bands: AudioBands,
     _time: number
   ) {
-    // Hide particles
     for (let i = 0; i < count; i++) {
       positions[i * 3 + 1] = -200
       sizes[i] = 0
@@ -528,5 +419,4 @@ export function getTerrainMode(): TerrainMode {
 
 export function setTerrainGradient(_gradient: any) {
   // Kept for compatibility but now uses locked palettes
-  // Could switch between COLOR_SCHEMES if desired
 }

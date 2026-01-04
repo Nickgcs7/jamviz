@@ -7,9 +7,18 @@ interface LandingPageProps {
 export default function LandingPage({ onStart }: LandingPageProps) {
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 })
   const [isHovering, setIsHovering] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number>(0)
   const waveformRef = useRef<number[]>(Array(64).fill(0))
+
+  // Detect mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   // Animated waveform background
   useEffect(() => {
@@ -43,10 +52,10 @@ export default function LandingPage({ onStart }: LandingPageProps) {
 
       // Draw flowing waveform ribbons - forest green to teal
       const centerY = canvas.height * 0.5
-      const ribbonCount = 3
+      const ribbonCount = isMobile ? 2 : 3
       
       for (let r = 0; r < ribbonCount; r++) {
-        const offset = (r - 1) * 60
+        const offset = (r - 1) * (isMobile ? 40 : 60)
         const alpha = 0.08 - r * 0.02
         
         ctx.beginPath()
@@ -55,7 +64,7 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         for (let i = 0; i <= 64; i++) {
           const x = (i / 64) * canvas.width
           const waveVal = waveformRef.current[Math.min(i, 63)] || 0
-          const y = centerY + offset + waveVal * 80 * Math.sin(time + i * 0.1 + r)
+          const y = centerY + offset + waveVal * (isMobile ? 50 : 80) * Math.sin(time + i * 0.1 + r)
           
           if (i === 0) ctx.moveTo(x, y)
           else ctx.lineTo(x, y)
@@ -72,8 +81,8 @@ export default function LandingPage({ onStart }: LandingPageProps) {
         ctx.stroke()
       }
 
-      // Floating particles - updated to green/teal
-      const particleCount = 40
+      // Floating particles - updated to green/teal (fewer on mobile)
+      const particleCount = isMobile ? 20 : 40
       for (let i = 0; i < particleCount; i++) {
         const px = ((i * 137.5) % canvas.width + time * 20) % canvas.width
         const py = ((i * 91.3) % canvas.height + Math.sin(time + i) * 30)
@@ -99,49 +108,62 @@ export default function LandingPage({ onStart }: LandingPageProps) {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', resize)
     }
-  }, [isHovering])
+  }, [isHovering, isMobile])
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (isMobile) return // Skip on mobile for performance
     setMousePos({
       x: e.clientX / window.innerWidth,
       y: e.clientY / window.innerHeight
     })
   }
 
+  const handleTouchStart = () => {
+    setIsHovering(true)
+  }
+
+  const handleTouchEnd = () => {
+    setIsHovering(false)
+  }
+
   return (
     <div
-      className="relative w-full h-screen bg-[#06060a] flex overflow-hidden"
+      className="relative w-full min-h-screen bg-[#06060a] flex overflow-hidden"
       onMouseMove={handleMouseMove}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Animated canvas background */}
       <canvas ref={canvasRef} className="absolute inset-0" />
 
-      {/* Gradient orb following mouse */}
-      <div 
-        className="absolute w-[800px] h-[800px] rounded-full pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, rgba(0,154,202,0.05) 40%, transparent 70%)',
-          left: `${mousePos.x * 100}%`,
-          top: `${mousePos.y * 100}%`,
-          transform: 'translate(-50%, -50%)',
-          transition: 'left 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), top 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
-          filter: 'blur(40px)'
-        }}
-      />
+      {/* Gradient orb following mouse - hidden on mobile */}
+      {!isMobile && (
+        <div 
+          className="absolute w-[800px] h-[800px] rounded-full pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle, rgba(16,185,129,0.15) 0%, rgba(0,154,202,0.05) 40%, transparent 70%)',
+            left: `${mousePos.x * 100}%`,
+            top: `${mousePos.y * 100}%`,
+            transform: 'translate(-50%, -50%)',
+            transition: 'left 1.2s cubic-bezier(0.25, 0.1, 0.25, 1), top 1.2s cubic-bezier(0.25, 0.1, 0.25, 1)',
+            filter: 'blur(40px)'
+          }}
+        />
+      )}
 
       {/* Main content */}
-      <div className="relative z-10 w-full flex flex-col items-center justify-center px-6">
+      <div className="relative z-10 w-full flex flex-col items-center justify-center px-4 sm:px-6 py-8 sm:py-0">
         
         {/* Logo section */}
-        <div className="flex flex-col items-center gap-2 mb-12">
+        <div className="flex flex-col items-center gap-2 mb-8 sm:mb-12">
           {/* Waveform icon */}
-          <div className="flex items-center gap-[3px] mb-4">
+          <div className="flex items-center gap-[2px] sm:gap-[3px] mb-3 sm:mb-4">
             {[0.4, 0.7, 1, 0.8, 0.5, 0.9, 0.6, 0.75, 0.45].map((h, i) => (
               <div
                 key={i}
-                className="w-1 bg-gradient-to-t from-emerald-600 to-teal-500 rounded-full"
+                className="w-0.5 sm:w-1 bg-gradient-to-t from-emerald-600 to-teal-500 rounded-full"
                 style={{
-                  height: `${h * 32}px`,
+                  height: `${h * (isMobile ? 24 : 32)}px`,
                   animation: `pulse 1.5s ease-in-out ${i * 0.1}s infinite`
                 }}
               />
@@ -149,7 +171,7 @@ export default function LandingPage({ onStart }: LandingPageProps) {
           </div>
           
           {/* Logo text */}
-          <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold tracking-tight">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold tracking-tight">
             <span className="bg-gradient-to-r from-white via-white to-white/80 bg-clip-text text-transparent">
               Jam
             </span>
@@ -158,42 +180,51 @@ export default function LandingPage({ onStart }: LandingPageProps) {
             </span>
           </h1>
           
-          <p className="text-white/40 text-sm md:text-base tracking-[0.2em] uppercase mt-2">
+          <p className="text-white/40 text-xs sm:text-sm md:text-base tracking-[0.15em] sm:tracking-[0.2em] uppercase mt-2">
             Audio Reactive Visuals
           </p>
         </div>
 
         {/* CTA Section */}
-        <div className="flex flex-col items-center gap-6">
+        <div className="flex flex-col items-center gap-4 sm:gap-6 w-full max-w-xs sm:max-w-none">
           <button
             onClick={onStart}
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
-            className="group relative px-12 py-4 rounded-full overflow-hidden transition-all duration-500"
+            className="group relative px-8 sm:px-12 py-3 sm:py-4 rounded-full overflow-hidden transition-all duration-500 w-full sm:w-auto active:scale-95"
           >
             {/* Button gradient background */}
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 opacity-90 group-hover:opacity-100 transition-opacity" />
             
-            {/* Shine effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+            {/* Shine effect - hidden on mobile for performance */}
+            {!isMobile && (
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+            )}
             
             {/* Button text */}
-            <span className="relative text-white font-semibold tracking-wide">
+            <span className="relative text-white font-semibold tracking-wide text-sm sm:text-base">
               Start Visualizer
             </span>
           </button>
 
           {/* Microphone indicator */}
-          <div className="flex items-center gap-2 text-white/40 text-sm">
+          <div className="flex items-center gap-2 text-white/40 text-xs sm:text-sm">
             <MicIcon />
             <span>Uses your microphone</span>
           </div>
         </div>
+
+        {/* Mobile hint */}
+        {isMobile && (
+          <p className="text-white/20 text-xs mt-8 text-center px-4">
+            For best experience, use landscape orientation
+          </p>
+        )}
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-6 left-0 right-0 flex justify-center">
-        <p className="text-white/20 text-xs tracking-wider">
+      <div className="absolute bottom-4 sm:bottom-6 left-0 right-0 flex justify-center">
+        <p className="text-white/20 text-[10px] sm:text-xs tracking-wider">
           WebGL Visualizer • Built with Three.js
         </p>
       </div>

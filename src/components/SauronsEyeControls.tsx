@@ -4,7 +4,6 @@ import {
   getSauronsEyeConfig,
   setSauronsEyeGeometry,
   setSauronsEyeBeam,
-  setSauronsEyeEmbers,
   setSauronsEyeAudioResponse,
   setSauronsEyeAnimation,
   setSauronsEyeColorMode,
@@ -21,7 +20,7 @@ interface SauronsEyeControlsProps {
 
 export default function SauronsEyeControls({ visible, onClose }: SauronsEyeControlsProps) {
   const [config, setConfig] = useState<SauronsEyeConfig>(getSauronsEyeConfig())
-  const [activeTab, setActiveTab] = useState<'eye' | 'beam' | 'color' | 'effects'>('eye')
+  const [activeTab, setActiveTab] = useState<'eye' | 'beam' | 'arms' | 'audio'>('eye')
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
@@ -40,7 +39,6 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
 
   const gradientNames = Object.keys(builtInGradients)
 
-  // Mobile: full screen overlay, Desktop: side panel
   const panelClasses = isMobile 
     ? "fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col"
     : "absolute top-20 right-4 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden z-50"
@@ -60,7 +58,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
       </div>
 
       <div className="flex border-b border-white/10 shrink-0">
-        {(['eye', 'beam', 'color', 'effects'] as const).map((tab) => (
+        {(['eye', 'beam', 'arms', 'audio'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -91,25 +89,6 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                 value={config.eyeSize}
                 onChange={(e) => {
                   setSauronsEyeGeometry({ eyeSize: parseInt(e.target.value) })
-                  setConfig(getSauronsEyeConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Iris Rings</label>
-                <span className="text-white/80 text-xs">{config.irisRings}</span>
-              </div>
-              <input
-                type="range"
-                min="2"
-                max="12"
-                step="1"
-                value={config.irisRings}
-                onChange={(e) => {
-                  setSauronsEyeGeometry({ irisRings: parseInt(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
@@ -153,57 +132,43 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
               />
             </div>
 
-            <div className="pt-2 border-t border-white/5">
-              <p className="text-white/40 text-xs mb-3">Embers</p>
+            <div className="pt-3 border-t border-white/5">
+              <p className="text-white/40 text-xs mb-3">Color</p>
               
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-white/60 text-xs">Show Embers</label>
-                <button
-                  onClick={() => {
-                    setSauronsEyeEmbers({ embersEnabled: !config.embersEnabled })
-                    setConfig(getSauronsEyeConfig())
-                  }}
-                  className={`px-3 py-2 sm:py-1 rounded text-xs transition-colors ${
-                    config.embersEnabled
-                      ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
-                      : 'bg-white/5 text-white/40 border border-white/10'
-                  }`}
-                >
-                  {config.embersEnabled ? 'On' : 'Off'}
-                </button>
-              </div>
-
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Ember Count</label>
-                  <span className="text-white/80 text-xs">{config.emberCount}</span>
+                <label className="text-white/60 text-xs">Gradient</label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                  {gradientNames.map((name) => (
+                    <button
+                      key={name}
+                      onClick={() => {
+                        setSauronsEyeGradient(builtInGradients[name])
+                        setConfig(getSauronsEyeConfig())
+                      }}
+                      className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
+                        config.gradient.name === builtInGradients[name].name
+                          ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
+                          : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
                 </div>
-                <input
-                  type="range"
-                  min="50"
-                  max="400"
-                  step="25"
-                  value={config.emberCount}
-                  onChange={(e) => {
-                    setSauronsEyeEmbers({ emberCount: parseInt(e.target.value) })
-                    setConfig(getSauronsEyeConfig())
-                  }}
-                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                />
               </div>
 
               <div className="space-y-2 mt-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Orbit Speed</label>
-                  <span className="text-white/80 text-xs">{config.emberOrbitSpeed.toFixed(2)}</span>
+                  <label className="text-white/60 text-xs">Glow Intensity</label>
+                  <span className="text-white/80 text-xs">{Math.round(config.glowIntensity * 100)}%</span>
                 </div>
                 <input
                   type="range"
-                  min="2"
-                  max="40"
-                  value={config.emberOrbitSpeed * 100}
+                  min="50"
+                  max="200"
+                  value={config.glowIntensity * 100}
                   onChange={(e) => {
-                    setSauronsEyeEmbers({ emberOrbitSpeed: parseInt(e.target.value) / 100 })
+                    setSauronsEyeAnimation({ glowIntensity: parseInt(e.target.value) / 100 })
                     setConfig(getSauronsEyeConfig())
                   }}
                   className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
@@ -239,8 +204,8 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
               </div>
               <input
                 type="range"
-                min="30"
-                max="120"
+                min="20"
+                max="80"
                 step="5"
                 value={config.beamLength}
                 onChange={(e) => {
@@ -253,17 +218,17 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Beam Width</label>
+                <label className="text-white/60 text-xs">Beam Thickness</label>
                 <span className="text-white/80 text-xs">{config.beamWidth}</span>
               </div>
               <input
                 type="range"
-                min="10"
-                max="50"
-                step="2"
+                min="1"
+                max="8"
+                step="0.5"
                 value={config.beamWidth}
                 onChange={(e) => {
-                  setSauronsEyeBeam({ beamWidth: parseInt(e.target.value) })
+                  setSauronsEyeBeam({ beamWidth: parseFloat(e.target.value) })
                   setConfig(getSauronsEyeConfig())
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
@@ -313,7 +278,7 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
               </div>
               <input
                 type="range"
-                min="20"
+                min="50"
                 max="200"
                 value={config.beamIntensity * 100}
                 onChange={(e) => {
@@ -323,86 +288,40 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Beam Particles</label>
-                <span className="text-white/80 text-xs">{config.beamParticleCount}</span>
-              </div>
-              <input
-                type="range"
-                min="200"
-                max="1500"
-                step="100"
-                value={config.beamParticleCount}
-                onChange={(e) => {
-                  setSauronsEyeBeam({ beamParticleCount: parseInt(e.target.value) })
-                  setConfig(getSauronsEyeConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-              />
-            </div>
           </>
         )}
 
-        {activeTab === 'color' && (
+        {activeTab === 'arms' && (
           <>
-            <div className="space-y-2">
-              <label className="text-white/60 text-xs">Color Mode</label>
-              <div className="grid grid-cols-2 gap-2">
-                {(['gradient', 'pulse', 'rainbow', 'fire'] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => {
-                      setSauronsEyeColorMode(mode)
-                      setConfig(getSauronsEyeConfig())
-                    }}
-                    className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
-                      config.colorMode === mode
-                        ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
-                        : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-white/60 text-xs">Gradient</label>
-              <div className="grid grid-cols-2 gap-2 max-h-40 sm:max-h-32 overflow-y-auto">
-                {gradientNames.map((name) => (
-                  <button
-                    key={name}
-                    onClick={() => {
-                      setSauronsEyeGradient(builtInGradients[name])
-                      setConfig(getSauronsEyeConfig())
-                    }}
-                    className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
-                      config.gradient.name === builtInGradients[name].name
-                        ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
-                        : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
-                    }`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-white/60 text-xs">Enable Arms</label>
+              <button
+                onClick={() => {
+                  updateConfig({ armsEnabled: !config.armsEnabled })
+                }}
+                className={`px-3 py-2 sm:py-1 rounded text-xs transition-colors ${
+                  config.armsEnabled
+                    ? 'bg-orange-500/30 text-orange-400 border border-orange-500/30'
+                    : 'bg-white/5 text-white/40 border border-white/10'
+                }`}
+              >
+                {config.armsEnabled ? 'On' : 'Off'}
+              </button>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Color Cycle Speed</label>
-                <span className="text-white/80 text-xs">{config.colorCycleSpeed.toFixed(2)}</span>
+                <label className="text-white/60 text-xs">Arm Count</label>
+                <span className="text-white/80 text-xs">{config.armCount}</span>
               </div>
               <input
                 type="range"
-                min="0"
-                max="50"
-                value={config.colorCycleSpeed * 100}
+                min="4"
+                max="16"
+                step="2"
+                value={config.armCount}
                 onChange={(e) => {
-                  updateConfig({ colorCycleSpeed: parseInt(e.target.value) / 100 })
+                  updateConfig({ armCount: parseInt(e.target.value) })
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
@@ -410,78 +329,38 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Glow Intensity</label>
-                <span className="text-white/80 text-xs">{Math.round(config.glowIntensity * 100)}%</span>
+                <label className="text-white/60 text-xs">Arm Length</label>
+                <span className="text-white/80 text-xs">{config.armLength}</span>
               </div>
               <input
                 type="range"
-                min="20"
-                max="200"
-                value={config.glowIntensity * 100}
-                onChange={(e) => {
-                  setSauronsEyeAnimation({ glowIntensity: parseInt(e.target.value) / 100 })
-                  setConfig(getSauronsEyeConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-              />
-            </div>
-          </>
-        )}
-
-        {activeTab === 'effects' && (
-          <>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Swirl Speed</label>
-                <span className="text-white/80 text-xs">{config.swirlSpeed.toFixed(2)}</span>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="100"
-                value={config.swirlSpeed * 100}
-                onChange={(e) => {
-                  setSauronsEyeAnimation({ swirlSpeed: parseInt(e.target.value) / 100 })
-                  setConfig(getSauronsEyeConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Pulse Speed</label>
-                <span className="text-white/80 text-xs">{config.pulseSpeed.toFixed(1)}</span>
-              </div>
-              <input
-                type="range"
-                min="5"
+                min="15"
                 max="60"
-                value={config.pulseSpeed * 10}
+                step="5"
+                value={config.armLength}
                 onChange={(e) => {
-                  setSauronsEyeAnimation({ pulseSpeed: parseInt(e.target.value) / 10 })
-                  setConfig(getSauronsEyeConfig())
+                  updateConfig({ armLength: parseInt(e.target.value) })
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
               />
             </div>
 
-            <div className="pt-2 border-t border-white/5">
-              <p className="text-white/40 text-xs mb-3">Audio Response</p>
+            <div className="pt-3 border-t border-white/5">
+              <p className="text-white/40 text-xs mb-3">Wave Motion</p>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Beat Reactivity</label>
-                  <span className="text-white/80 text-xs">{config.beatReactivity.toFixed(1)}x</span>
+                  <label className="text-white/60 text-xs">Wave Frequency</label>
+                  <span className="text-white/80 text-xs">{config.armWaveFrequency}</span>
                 </div>
                 <input
                   type="range"
-                  min="0"
-                  max="20"
-                  value={config.beatReactivity * 10}
+                  min="1"
+                  max="8"
+                  step="0.5"
+                  value={config.armWaveFrequency}
                   onChange={(e) => {
-                    setSauronsEyeAudioResponse({ beatReactivity: parseInt(e.target.value) / 10 })
-                    setConfig(getSauronsEyeConfig())
+                    updateConfig({ armWaveFrequency: parseFloat(e.target.value) })
                   }}
                   className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 />
@@ -489,70 +368,153 @@ export default function SauronsEyeControls({ visible, onClose }: SauronsEyeContr
 
               <div className="space-y-2 mt-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Bass Influence</label>
-                  <span className="text-white/80 text-xs">{config.bassInfluence.toFixed(1)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={config.bassInfluence * 10}
-                  onChange={(e) => {
-                    setSauronsEyeAudioResponse({ bassInfluence: parseInt(e.target.value) / 10 })
-                    setConfig(getSauronsEyeConfig())
-                  }}
-                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                />
-              </div>
-
-              <div className="space-y-2 mt-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Mid Influence</label>
-                  <span className="text-white/80 text-xs">{config.midInfluence.toFixed(1)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={config.midInfluence * 10}
-                  onChange={(e) => {
-                    setSauronsEyeAudioResponse({ midInfluence: parseInt(e.target.value) / 10 })
-                    setConfig(getSauronsEyeConfig())
-                  }}
-                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                />
-              </div>
-
-              <div className="space-y-2 mt-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">High Influence</label>
-                  <span className="text-white/80 text-xs">{config.highInfluence.toFixed(1)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={config.highInfluence * 10}
-                  onChange={(e) => {
-                    setSauronsEyeAudioResponse({ highInfluence: parseInt(e.target.value) / 10 })
-                    setConfig(getSauronsEyeConfig())
-                  }}
-                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                />
-              </div>
-
-              <div className="space-y-2 mt-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Smoothing</label>
-                  <span className="text-white/80 text-xs">{config.smoothingFactor.toFixed(2)}</span>
+                  <label className="text-white/60 text-xs">Wave Amplitude</label>
+                  <span className="text-white/80 text-xs">{config.armWaveAmplitude}</span>
                 </div>
                 <input
                   type="range"
                   min="2"
-                  max="30"
-                  value={config.smoothingFactor * 100}
+                  max="20"
+                  step="1"
+                  value={config.armWaveAmplitude}
                   onChange={(e) => {
-                    setSauronsEyeAudioResponse({ smoothingFactor: parseInt(e.target.value) / 100 })
+                    updateConfig({ armWaveAmplitude: parseInt(e.target.value) })
+                  }}
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                />
+              </div>
+
+              <div className="space-y-2 mt-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/60 text-xs">Wave Speed</label>
+                  <span className="text-white/80 text-xs">{config.armSpeed.toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="40"
+                  value={config.armSpeed * 10}
+                  onChange={(e) => {
+                    updateConfig({ armSpeed: parseInt(e.target.value) / 10 })
+                  }}
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'audio' && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Beat Reactivity</label>
+                <span className="text-white/80 text-xs">{config.beatReactivity.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.beatReactivity * 10}
+                onChange={(e) => {
+                  setSauronsEyeAudioResponse({ beatReactivity: parseInt(e.target.value) / 10 })
+                  setConfig(getSauronsEyeConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+              />
+              <p className="text-white/30 text-xs">Eye flare on beats</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Bass Influence</label>
+                <span className="text-white/80 text-xs">{config.bassInfluence.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.bassInfluence * 10}
+                onChange={(e) => {
+                  setSauronsEyeAudioResponse({ bassInfluence: parseInt(e.target.value) / 10 })
+                  setConfig(getSauronsEyeConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+              />
+              <p className="text-white/30 text-xs">Eye expansion, beam width</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Mid Influence</label>
+                <span className="text-white/80 text-xs">{config.midInfluence.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.midInfluence * 10}
+                onChange={(e) => {
+                  setSauronsEyeAudioResponse({ midInfluence: parseInt(e.target.value) / 10 })
+                  setConfig(getSauronsEyeConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+              />
+              <p className="text-white/30 text-xs">Arm wave intensity</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">High Influence</label>
+                <span className="text-white/80 text-xs">{config.highInfluence.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.highInfluence * 10}
+                onChange={(e) => {
+                  setSauronsEyeAudioResponse({ highInfluence: parseInt(e.target.value) / 10 })
+                  setConfig(getSauronsEyeConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+              />
+              <p className="text-white/30 text-xs">Pupil dilation</p>
+            </div>
+
+            <div className="pt-3 border-t border-white/5">
+              <p className="text-white/40 text-xs mb-3">Animation</p>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/60 text-xs">Swirl Speed</label>
+                  <span className="text-white/80 text-xs">{config.swirlSpeed.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="100"
+                  value={config.swirlSpeed * 100}
+                  onChange={(e) => {
+                    setSauronsEyeAnimation({ swirlSpeed: parseInt(e.target.value) / 100 })
+                    setConfig(getSauronsEyeConfig())
+                  }}
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                />
+              </div>
+
+              <div className="space-y-2 mt-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/60 text-xs">Pulse Speed</label>
+                  <span className="text-white/80 text-xs">{config.pulseSpeed.toFixed(1)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="5"
+                  max="60"
+                  value={config.pulseSpeed * 10}
+                  onChange={(e) => {
+                    setSauronsEyeAnimation({ pulseSpeed: parseInt(e.target.value) / 10 })
                     setConfig(getSauronsEyeConfig())
                   }}
                   className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500"

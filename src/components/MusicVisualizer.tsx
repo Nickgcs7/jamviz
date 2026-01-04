@@ -11,6 +11,7 @@ import { AudioAnalyzer, type AudioBands, createDefaultAudioBands } from '@/lib/A
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode, type SceneObjects } from '@/lib/visualizations'
 import { postProcessingPresets, getPresetNames, getCurrentPreset, setPreset, getAudioReactiveSettings } from '@/lib/postProcessingPresets'
+import SpectrumControls from './SpectrumControls'
 
 const PARTICLE_COUNT = 10000
 const POSITION_LERP_FACTOR = 0.12
@@ -59,6 +60,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const [currentPresetId, setCurrentPresetId] = useState('clean')
   const [showUI, setShowUI] = useState(true)
   const [showPresets, setShowPresets] = useState(false)
+  const [showSpectrumControls, setShowSpectrumControls] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ledText, setLedText] = useState('JAMVIZ')
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
@@ -199,10 +201,11 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       }
 
       const isLedMatrix = currentMode.id === 'led_matrix'
-      const cameraIntensity = isLedMatrix ? 0.3 : 1.0
+      const isSpectrum = currentMode.id === 'spectrum_analyzer'
+      const cameraIntensity = (isLedMatrix || isSpectrum) ? 0.3 : 1.0
       const targetCameraX = (Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3) * cameraIntensity
       const targetCameraY = (Math.cos(time * 0.1) * 4 + bands.highSmooth * 4) * cameraIntensity
-      const targetCameraZ = isLedMatrix ? 55 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
+      const targetCameraZ = (isLedMatrix || isSpectrum) ? 55 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
       refs.currentCameraZ = lerp(refs.currentCameraZ, targetCameraZ, CAMERA_LERP_FACTOR)
@@ -211,14 +214,14 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       camera.position.z = refs.currentCameraZ
       camera.lookAt(0, 0, 0)
 
-      if (particles.visible && !currentMode.hideParticles && !isLedMatrix) {
+      if (particles.visible && !currentMode.hideParticles && !isLedMatrix && !isSpectrum) {
         const targetRotationSpeed = 0.0003 + bands.overallSmooth * 0.008 + bands.beatIntensity * 0.004
         refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
         particles.rotation.y += refs.currentRotationSpeed
         const targetRotationX = bands.midSmooth * 0.1
         refs.currentRotationX = lerp(refs.currentRotationX, targetRotationX, ROTATION_LERP_FACTOR)
         particles.rotation.x = refs.currentRotationX
-      } else if (isLedMatrix) {
+      } else if (isLedMatrix || isSpectrum) {
         particles.rotation.x = 0; particles.rotation.y = 0; particles.rotation.z = 0
       }
       composer.render()
@@ -272,6 +275,8 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     setCurrentMode(mode)
     updateParticleLayout(mode)
     if (mode.setText) mode.setText(ledText)
+    // Close spectrum controls when switching away from spectrum analyzer
+    if (mode.id !== 'spectrum_analyzer') setShowSpectrumControls(false)
   }, [updateParticleLayout, ledText])
 
   const handlePresetChange = useCallback((presetId: string) => {
@@ -314,6 +319,23 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
             Exit
           </button>
           <div className="flex items-center gap-3">
+            {/* Spectrum Analyzer Settings Button */}
+            {currentMode.id === 'spectrum_analyzer' && (
+              <button
+                onClick={() => setShowSpectrumControls(!showSpectrumControls)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-all ${
+                  showSpectrumControls 
+                    ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
+                    : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/60 hover:text-white'
+                }`}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Settings
+              </button>
+            )}
             <div className="relative">
               <button onClick={() => setShowPresets(!showPresets)} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-sm transition-all">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" /></svg>
@@ -364,6 +386,12 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
           <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-sm">{error}</div>
         )}
       </div>
+      
+      {/* Spectrum Controls Panel */}
+      <SpectrumControls
+        visible={showSpectrumControls && currentMode.id === 'spectrum_analyzer'}
+        onClose={() => setShowSpectrumControls(false)}
+      />
     </div>
   )
 }

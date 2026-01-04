@@ -414,10 +414,14 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
 
         {/* Mobile mode selector - bottom sheet style */}
         {isMobile ? (
-          <div className="absolute bottom-0 left-0 right-0 pointer-events-auto">
+          <div className="absolute bottom-0 left-0 right-0 pointer-events-auto z-30">
             {/* Current mode button */}
             <button 
-              onClick={() => setShowModeList(!showModeList)}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setShowModeList(!showModeList)
+              }}
               className="w-full px-4 py-3 bg-black/80 border-t border-white/10 flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
@@ -433,8 +437,19 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
             {showModeList && (
               <div className="bg-black/95 border-t border-white/10 max-h-[50vh] overflow-y-auto">
                 {visualizations.map((mode, i) => (
-                  <button key={mode.id} onClick={() => handleModeChange(mode)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-all ${currentMode.id === mode.id ? 'bg-emerald-500/20 text-white' : 'text-white/60 active:bg-white/5'}`}>
+                  <button 
+                    key={mode.id} 
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleModeChange(mode)
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault()
+                      handleModeChange(mode)
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-4 text-sm transition-all select-none ${currentMode.id === mode.id ? 'bg-emerald-500/20 text-white' : 'text-white/60 active:bg-white/10'}`}
+                  >
                     <span className="text-white/30 text-xs font-mono w-4">{i + 1}</span>
                     {mode.name}
                   </button>
@@ -468,7 +483,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
 
         {/* Tap to hide hint - mobile only */}
         {isMobile && !showModeList && (
-          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 text-white/20 text-xs pointer-events-auto" onClick={() => setShowUI(false)}>
+          <div className="absolute bottom-16 left-1/2 -translate-x-1/2 text-white/20 text-xs pointer-events-none">
             Tap visualization to hide UI
           </div>
         )}
@@ -478,7 +493,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         )}
       </div>
       
-      {/* Tap area to toggle UI on mobile */}
+      {/* Tap area to toggle UI on mobile - only when UI is hidden */}
       {isMobile && !showUI && (
         <div className="absolute inset-0 z-20" onClick={() => setShowUI(true)} />
       )}

@@ -18,15 +18,15 @@ export const metaballVertexShader = `
 `
 
 // Enhanced Lava Lamp metaball fragment shader
-// Supports up to 8 blobs with dynamic count
+// Tuned for more distinct, separate blobs that occasionally merge
 export const lavaLampFragmentShader = `
   precision highp float;
   
   uniform float uTime;
   uniform vec2 uResolution;
-  uniform vec3 uBlobPositions[8];
-  uniform float uBlobSizes[8];
-  uniform vec3 uBlobColors[8];
+  uniform vec3 uBlobPositions[12];
+  uniform float uBlobSizes[12];
+  uniform vec3 uBlobColors[12];
   uniform int uBlobCount;
   uniform float uBassSmooth;
   uniform float uBeatIntensity;
@@ -34,27 +34,16 @@ export const lavaLampFragmentShader = `
   
   varying vec2 vUv;
   
-  // Smooth minimum for organic blob merging
-  float smin(float a, float b, float k) {
-    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-    return mix(b, a, h) - k * h * (1.0 - h);
-  }
-  
-  // Simple noise
-  float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-  }
-  
   void main() {
     vec2 aspect = vec2(uResolution.x / uResolution.y, 1.0);
     vec2 uv = (vUv - 0.5) * 2.0 * aspect;
-    uv *= 30.0;
+    uv *= 35.0;  // Increased scale for more separation
     
     float field = 0.0;
     vec3 colorMix = vec3(0.0);
     float totalWeight = 0.0;
     
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 12; i++) {
       if (i >= uBlobCount) break;
       
       vec2 blobPos = uBlobPositions[i].xy;
@@ -62,17 +51,19 @@ export const lavaLampFragmentShader = `
       
       vec2 diff = uv - blobPos;
       
-      // Vertical stretching based on velocity
+      // Subtle vertical stretching based on velocity
       float velocity = uBlobPositions[i].z;
-      float stretch = 1.0 + abs(velocity) * 0.35;
+      float stretch = 1.0 + abs(velocity) * 0.2;
       diff.y /= stretch;
       
       float dist = length(diff);
       
-      // Metaball contribution
-      float contribution = (blobSize * blobSize) / (dist * dist + 0.4);
+      // Sharper falloff for more distinct blobs
+      // Using smaller exponent and higher base distance
+      float contribution = (blobSize * blobSize * 0.8) / (dist * dist + 1.5);
       field += contribution;
       
+      // Color weighting - closer blobs have more influence
       float colorWeight = contribution * contribution;
       colorMix += uBlobColors[i] * colorWeight;
       totalWeight += colorWeight;
@@ -82,36 +73,37 @@ export const lavaLampFragmentShader = `
       colorMix /= totalWeight;
     }
     
-    float threshold = 1.0;
-    float edge = smoothstep(threshold - 0.35, threshold + 0.12, field);
-    float innerGlow = smoothstep(threshold, threshold + 2.5, field);
+    // Higher threshold = blobs need to be closer to merge
+    float threshold = 1.8;
+    float edge = smoothstep(threshold - 0.4, threshold + 0.15, field);
+    float innerGlow = smoothstep(threshold, threshold + 2.0, field);
     
-    // Merge highlight
-    float mergeZone = smoothstep(threshold + 0.3, threshold + 1.5, field) - 
-                      smoothstep(threshold + 1.5, threshold + 3.5, field);
+    // Merge highlight - visible when blobs are close
+    float mergeZone = smoothstep(threshold + 0.5, threshold + 1.8, field) - 
+                      smoothstep(threshold + 1.8, threshold + 3.5, field);
     
-    // Background
+    // Deep background gradient
     vec3 bgColor = mix(
-      vec3(0.04, 0.015, 0.08),
-      vec3(0.08, 0.03, 0.12),
-      vUv.y + sin(uTime * 0.12) * 0.08
+      vec3(0.03, 0.01, 0.06),
+      vec3(0.06, 0.02, 0.10),
+      vUv.y + sin(uTime * 0.08) * 0.05
     );
     
-    // Blob color
+    // Blob color with subtle glow
     vec3 blobColor = colorMix;
-    blobColor += innerGlow * 0.35;
-    blobColor += mergeZone * vec3(0.15, 0.12, 0.08);
-    blobColor *= 0.85 + uBeatIntensity * 0.35;
+    blobColor += innerGlow * 0.25;
+    blobColor += mergeZone * vec3(0.12, 0.1, 0.06);
+    blobColor *= 0.9 + uBeatIntensity * 0.2;
     
-    // Edge highlight
-    float edgeHighlight = smoothstep(threshold - 0.12, threshold, field) - 
-                          smoothstep(threshold, threshold + 0.25, field);
+    // Subtle edge highlight
+    float edgeHighlight = smoothstep(threshold - 0.15, threshold, field) - 
+                          smoothstep(threshold, threshold + 0.3, field);
     
     vec3 finalColor = mix(bgColor, blobColor, edge);
-    finalColor += edgeHighlight * 0.12;
+    finalColor += edgeHighlight * 0.08;
     
-    // Vignette
-    float vignette = 1.0 - length(vUv - 0.5) * 0.4;
+    // Soft vignette
+    float vignette = 1.0 - length(vUv - 0.5) * 0.35;
     finalColor *= vignette;
     
     gl_FragColor = vec4(finalColor, 1.0);

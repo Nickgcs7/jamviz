@@ -45,7 +45,7 @@ const DEFAULT_CONFIG: LaserArrayConfig = {
   originZ: -5,
   uplightCount: 3,
   uplightSpread: 40,
-  uplightLength: 35,
+  uplightLength: 50,  // Increased from 35
   uplightBeams: 5,
   sweepSpeed: 0.6,
   sweepRange: 60,
@@ -100,7 +100,7 @@ let lineGeometry: THREE.BufferGeometry | null = null
 let lineMaterial: THREE.LineBasicMaterial | null = null
 let lineSegments: THREE.LineSegments | null = null
 let glowGeometry: THREE.BufferGeometry | null = null
-let glowMaterial: THREE.PointsMaterial | null = null
+let glowMaterial: THREE.ShaderMaterial | null = null
 let glowPoints: THREE.Points | null = null
 let fogGeometry: THREE.BufferGeometry | null = null
 let fogMaterial: THREE.PointsMaterial | null = null
@@ -109,6 +109,46 @@ let fogPoints: THREE.Points | null = null
 let currentActiveFixtures = 5
 let sweepPhase = 0
 
+// Custom shader for circular glowing emitters
+const emitterVertexShader = `
+  attribute float size;
+  attribute vec3 customColor;
+  varying vec3 vColor;
+  varying float vSize;
+  
+  void main() {
+    vColor = customColor;
+    vSize = size;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = size * (300.0 / -mvPosition.z);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`
+
+const emitterFragmentShader = `
+  varying vec3 vColor;
+  varying float vSize;
+  
+  void main() {
+    vec2 center = gl_PointCoord - vec2(0.5);
+    float dist = length(center);
+    
+    // Create circular shape with soft glow
+    float circle = 1.0 - smoothstep(0.2, 0.5, dist);
+    float glow = exp(-dist * 3.0) * 0.8;
+    
+    // Combine circle and glow
+    float alpha = circle + glow;
+    
+    // Bright center, glowing edges
+    vec3 color = vColor * (circle * 1.5 + glow * 0.8);
+    
+    if (alpha < 0.01) discard;
+    
+    gl_FragColor = vec4(color, alpha);
+  }
+`
+
 function getGradient(): GradientPreset {
   return config.gradient && config.gradient.colorStops ? config.gradient : builtInGradients.neon
 }
@@ -116,7 +156,7 @@ function getGradient(): GradientPreset {
 function initFixtures() {
   fixtures.length = 0
   
-  // Main fixtures (top, pointing down)
+  // Main fixtures (top, pointing DOWN)
   for (let f = 0; f < MAX_FIXTURES; f++) {
     const fixture: LaserFixture = {
       x: 0, y: config.originY, z: config.originZ,
@@ -135,8 +175,10 @@ function initFixtures() {
       else if (b < config.beamsPerLaser * 0.75) band = 'high'
       else band = 'treble'
       fixture.beams.push({
-        angle: spreadAngle, pitch: Math.PI * 0.65 + Math.random() * 0.1,
-        targetAngle: spreadAngle, targetPitch: Math.PI * 0.65,
+        angle: spreadAngle, 
+        pitch: Math.PI * 0.6,  // Pointing downward
+        targetAngle: spreadAngle, 
+        targetPitch: Math.PI * 0.6,
         length: config.laserLength, targetLength: config.laserLength,
         hue: fixture.baseHue + (b / config.beamsPerLaser) * 0.15,
         intensity: 0.8, flickerPhase: Math.random() * Math.PI * 2, frequencyBand: band
@@ -291,11 +333,21 @@ export const laserArray: VisualizationMode = {
     lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial)
     scene.add(lineSegments)
 
+    // Create circular glowing emitters using custom shader
     const totalFixtures = MAX_FIXTURES + MAX_UPLIGHTS
     glowGeometry = new THREE.BufferGeometry()
     glowGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(totalFixtures * 3), 3))
-    glowGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(totalFixtures * 3), 3))
-    glowMaterial = new THREE.PointsMaterial({ size: 5, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, sizeAttenuation: true })
+    glowGeometry.setAttribute('customColor', new THREE.BufferAttribute(new Float32Array(totalFixtures * 3), 3))
+    glowGeometry.setAttribute('size', new THREE.BufferAttribute(new Float32Array(totalFixtures), 1))
+    
+    glowMaterial = new THREE.ShaderMaterial({
+      uniforms: {},
+      vertexShader: emitterVertexShader,
+      fragmentShader: emitterFragmentShader,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
     glowPoints = new THREE.Points(glowGeometry, glowMaterial)
     scene.add(glowPoints)
 
@@ -322,8 +374,11 @@ export const laserArray: VisualizationMode = {
         const colAttr = lineGeometry.getAttribute('color') as THREE.BufferAttribute
         const pos = posAttr.array as Float32Array, col = colAttr.array as Float32Array
         const glowPosAttr = glowGeometry.getAttribute('position') as THREE.BufferAttribute
-        const glowColAttr = glowGeometry.getAttribute('color') as THREE.BufferAttribute
-        const glowPos = glowPosAttr.array as Float32Array, glowCol = glowColAttr.array as Float32Array
+        const glowColAttr = glowGeometry.getAttribute('customColor') as THREE.BufferAttribute
+        const glowSizeAttr = glowGeometry.getAttribute('size') as THREE.BufferAttribute
+        const glowPos = glowPosAttr.array as Float32Array
+        const glowCol = glowColAttr.array as Float32Array
+        const glowSize = glowSizeAttr.array as Float32Array
 
         const targetFixtures = Math.min(MAX_FIXTURES, config.laserCount + Math.floor(bands.overallSmooth * 4 * config.beatReactivity))
         if (targetFixtures !== currentActiveFixtures) { currentActiveFixtures = targetFixtures; updateFixturePositions(currentActiveFixtures) }
@@ -334,10 +389,20 @@ export const laserArray: VisualizationMode = {
           const fix = fixtures[f]
           fix.intensity += (fix.targetIntensity - fix.intensity) * config.smoothingFactor
           
-          glowPos[f * 3] = fix.x; glowPos[f * 3 + 1] = fix.y; glowPos[f * 3 + 2] = fix.z
+          // Update emitter glow position, color, and size
+          glowPos[f * 3] = fix.x
+          glowPos[f * 3 + 1] = fix.y
+          glowPos[f * 3 + 2] = fix.z
+          
           const gi = fix.intensity * (0.5 + bands.overallSmooth * 0.5) * config.glowIntensity
           const [gr, gg, gb] = sampleGradient(gradient, cycleHue + fix.baseHue * 0.3)
-          glowCol[f * 3] = gr * gi; glowCol[f * 3 + 1] = gg * gi; glowCol[f * 3 + 2] = gb * gi
+          glowCol[f * 3] = gr * gi
+          glowCol[f * 3 + 1] = gg * gi
+          glowCol[f * 3 + 2] = gb * gi
+          
+          // Size pulses with beat
+          const baseSize = fix.isUplight ? 6 : 8
+          glowSize[f] = baseSize * fix.intensity * (1 + bands.beatIntensity * 0.5 * config.beatReactivity)
           
           if (fix.intensity < 0.1) continue
           fix.baseHue = cycleHue + (f % MAX_FIXTURES) * 0.08
@@ -360,13 +425,14 @@ export const laserArray: VisualizationMode = {
               const baseSweep = ((b / Math.max(1, activeBeams - 1)) - 0.5) * Math.PI * 0.35
               beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.8 + f * 0.5 + b * 0.3) * 0.2 * (1 + bandSmooth)
               beam.targetPitch = Math.PI * 0.3 + bandSmooth * 0.1
-              beam.targetLength = beamLength * (0.6 + bandSmooth * 0.5 + bands.beatIntensity * 0.3 * config.beatReactivity)
+              beam.targetLength = beamLength * (0.7 + bandSmooth * 0.4 + bands.beatIntensity * 0.3 * config.beatReactivity)
             } else {
-              // Main lasers: wider sweep, pointing down
+              // Main lasers: wider sweep, pointing DOWN (pitch > PI/2)
               const baseSweep = ((b / (activeBeams - 1)) - 0.5) * Math.PI * (config.sweepRange / 90)
               beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.6 + f * 0.7 + b * 0.25) * (0.25 + bandSmooth * 0.35)
               if (config.syncToBeats && bands.isBeat) beam.targetAngle += bands.beatIntensity * Math.sin((f * MAX_BEAMS_PER_FIXTURE + b) * 1.5) * 0.25 * config.beatReactivity
-              beam.targetPitch = Math.PI * 0.65 + Math.sin(time * 0.5 + f * 0.4) * 0.15 + bandSmooth * 0.15
+              // Pitch between 0.55π and 0.75π for downward angle
+              beam.targetPitch = Math.PI * 0.6 + Math.sin(time * 0.5 + f * 0.4) * 0.1 + bandSmooth * 0.1
               beam.targetLength = beamLength * (0.7 + bandSmooth * 0.4 + bands.beatIntensity * 0.2 * config.beatReactivity)
             }
             
@@ -377,7 +443,10 @@ export const laserArray: VisualizationMode = {
             
             const r = beam.length
             const endX = fix.x + Math.sin(beam.angle) * Math.sin(beam.pitch) * r
-            const endY = fix.y + (fix.isUplight ? Math.cos(beam.pitch) * r : -Math.cos(beam.pitch) * r)
+            // Main lasers go DOWN (subtract Y), uplights go UP (add Y)
+            const endY = fix.isUplight 
+              ? fix.y + Math.cos(beam.pitch) * r  // Uplight: add to go up
+              : fix.y - Math.cos(beam.pitch) * r  // Main: subtract to go down
             const endZ = fix.z + Math.cos(beam.angle) * Math.sin(beam.pitch) * r * 0.3
             
             pos[vi * 3] = fix.x; pos[vi * 3 + 1] = fix.y; pos[vi * 3 + 2] = fix.z
@@ -412,7 +481,11 @@ export const laserArray: VisualizationMode = {
           ;(fogGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true
           ;(fogGeometry.getAttribute('color') as THREE.BufferAttribute).needsUpdate = true
         }
-        posAttr.needsUpdate = true; colAttr.needsUpdate = true; glowPosAttr.needsUpdate = true; glowColAttr.needsUpdate = true
+        posAttr.needsUpdate = true
+        colAttr.needsUpdate = true
+        glowPosAttr.needsUpdate = true
+        glowColAttr.needsUpdate = true
+        glowSizeAttr.needsUpdate = true
       },
       dispose: () => {
         [lineGeometry, glowGeometry, fogGeometry].forEach(g => g?.dispose())
@@ -443,7 +516,9 @@ export const laserArray: VisualizationMode = {
           if (tp.t > 1) tp.t = 0
           const r = tp.t * beam.length, scatter = (1 - tp.t) * 1.5 * (Math.sin(pi * 3.7 + time * 4) * 0.5 + 0.5)
           const bx = fix.x + Math.sin(beam.angle) * Math.sin(beam.pitch) * r
-          const by = fix.y + (fix.isUplight ? Math.cos(beam.pitch) * r : -Math.cos(beam.pitch) * r)
+          const by = fix.isUplight 
+            ? fix.y + Math.cos(beam.pitch) * r 
+            : fix.y - Math.cos(beam.pitch) * r
           const bz = fix.z + Math.cos(beam.angle) * Math.sin(beam.pitch) * r * 0.3
           positions[pi * 3] = bx + Math.sin(pi * 2.3) * scatter
           positions[pi * 3 + 1] = by + Math.cos(pi * 1.9) * scatter
@@ -476,6 +551,13 @@ export function setLaserArrayLasers(p: { laserCount?: number; laserWidth?: numbe
   if (p.laserWidth !== undefined) config.laserWidth = p.laserWidth
   if (p.laserLength !== undefined) config.laserLength = p.laserLength
   if (p.beamsPerLaser !== undefined) config.beamsPerLaser = p.beamsPerLaser
+  initFixtures(); updateFixturePositions(config.laserCount)
+}
+export function setLaserArrayUplights(p: { uplightCount?: number; uplightSpread?: number; uplightLength?: number; uplightBeams?: number }) {
+  if (p.uplightCount !== undefined) config.uplightCount = p.uplightCount
+  if (p.uplightSpread !== undefined) config.uplightSpread = p.uplightSpread
+  if (p.uplightLength !== undefined) config.uplightLength = p.uplightLength
+  if (p.uplightBeams !== undefined) config.uplightBeams = p.uplightBeams
   initFixtures(); updateFixturePositions(config.laserCount)
 }
 export function setLaserArrayOrigin(p: { originSpread?: number; originY?: number; originZ?: number }) {

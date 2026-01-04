@@ -45,7 +45,7 @@ const DEFAULT_CONFIG: LaserArrayConfig = {
   originZ: -5,
   uplightCount: 3,
   uplightSpread: 40,
-  uplightLength: 50,  // Increased from 35
+  uplightLength: 55,
   uplightBeams: 5,
   sweepSpeed: 0.6,
   sweepRange: 60,
@@ -134,14 +134,14 @@ const emitterFragmentShader = `
     float dist = length(center);
     
     // Create circular shape with soft glow
-    float circle = 1.0 - smoothstep(0.2, 0.5, dist);
-    float glow = exp(-dist * 3.0) * 0.8;
+    float circle = 1.0 - smoothstep(0.15, 0.4, dist);
+    float glow = exp(-dist * 2.5) * 0.9;
     
     // Combine circle and glow
     float alpha = circle + glow;
     
     // Bright center, glowing edges
-    vec3 color = vColor * (circle * 1.5 + glow * 0.8);
+    vec3 color = vColor * (circle * 1.8 + glow);
     
     if (alpha < 0.01) discard;
     
@@ -156,7 +156,7 @@ function getGradient(): GradientPreset {
 function initFixtures() {
   fixtures.length = 0
   
-  // Main fixtures (top, pointing DOWN)
+  // Main fixtures (top, will point DOWN)
   for (let f = 0; f < MAX_FIXTURES; f++) {
     const fixture: LaserFixture = {
       x: 0, y: config.originY, z: config.originZ,
@@ -176,9 +176,9 @@ function initFixtures() {
       else band = 'treble'
       fixture.beams.push({
         angle: spreadAngle, 
-        pitch: Math.PI * 0.6,  // Pointing downward
+        pitch: Math.PI * 0.35,  // ~63 degrees from vertical
         targetAngle: spreadAngle, 
-        targetPitch: Math.PI * 0.6,
+        targetPitch: Math.PI * 0.35,
         length: config.laserLength, targetLength: config.laserLength,
         hue: fixture.baseHue + (b / config.beamsPerLaser) * 0.15,
         intensity: 0.8, flickerPhase: Math.random() * Math.PI * 2, frequencyBand: band
@@ -228,7 +228,6 @@ function updateFixturePositions(activeCount: number) {
   const spacing = config.originSpread / Math.max(1, activeCount - 1)
   const startX = -config.originSpread / 2
   
-  // Update main fixtures
   for (let f = 0; f < MAX_FIXTURES; f++) {
     if (f < activeCount) {
       fixtures[f].x = activeCount === 1 ? 0 : startX + f * spacing
@@ -240,7 +239,6 @@ function updateFixturePositions(activeCount: number) {
     }
   }
   
-  // Update uplights
   const uplightSpacing = config.uplightSpread / Math.max(1, config.uplightCount - 1)
   const uplightStartX = -config.uplightSpread / 2
   for (let u = 0; u < MAX_UPLIGHTS; u++) {
@@ -333,7 +331,6 @@ export const laserArray: VisualizationMode = {
     lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial)
     scene.add(lineSegments)
 
-    // Create circular glowing emitters using custom shader
     const totalFixtures = MAX_FIXTURES + MAX_UPLIGHTS
     glowGeometry = new THREE.BufferGeometry()
     glowGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(totalFixtures * 3), 3))
@@ -389,7 +386,6 @@ export const laserArray: VisualizationMode = {
           const fix = fixtures[f]
           fix.intensity += (fix.targetIntensity - fix.intensity) * config.smoothingFactor
           
-          // Update emitter glow position, color, and size
           glowPos[f * 3] = fix.x
           glowPos[f * 3 + 1] = fix.y
           glowPos[f * 3 + 2] = fix.z
@@ -400,8 +396,7 @@ export const laserArray: VisualizationMode = {
           glowCol[f * 3 + 1] = gg * gi
           glowCol[f * 3 + 2] = gb * gi
           
-          // Size pulses with beat
-          const baseSize = fix.isUplight ? 6 : 8
+          const baseSize = fix.isUplight ? 8 : 10
           glowSize[f] = baseSize * fix.intensity * (1 + bands.beatIntensity * 0.5 * config.beatReactivity)
           
           if (fix.intensity < 0.1) continue
@@ -421,18 +416,17 @@ export const laserArray: VisualizationMode = {
             }
             
             if (fix.isUplight) {
-              // Uplights: narrower sweep, pointing up
+              // Uplights: pointing UP
               const baseSweep = ((b / Math.max(1, activeBeams - 1)) - 0.5) * Math.PI * 0.35
               beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.8 + f * 0.5 + b * 0.3) * 0.2 * (1 + bandSmooth)
-              beam.targetPitch = Math.PI * 0.3 + bandSmooth * 0.1
+              beam.targetPitch = Math.PI * 0.25 + bandSmooth * 0.1
               beam.targetLength = beamLength * (0.7 + bandSmooth * 0.4 + bands.beatIntensity * 0.3 * config.beatReactivity)
             } else {
-              // Main lasers: wider sweep, pointing DOWN (pitch > PI/2)
+              // Main lasers: pointing DOWN
               const baseSweep = ((b / (activeBeams - 1)) - 0.5) * Math.PI * (config.sweepRange / 90)
               beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.6 + f * 0.7 + b * 0.25) * (0.25 + bandSmooth * 0.35)
               if (config.syncToBeats && bands.isBeat) beam.targetAngle += bands.beatIntensity * Math.sin((f * MAX_BEAMS_PER_FIXTURE + b) * 1.5) * 0.25 * config.beatReactivity
-              // Pitch between 0.55π and 0.75π for downward angle
-              beam.targetPitch = Math.PI * 0.6 + Math.sin(time * 0.5 + f * 0.4) * 0.1 + bandSmooth * 0.1
+              beam.targetPitch = Math.PI * 0.35 + Math.sin(time * 0.5 + f * 0.4) * 0.1 + bandSmooth * 0.1
               beam.targetLength = beamLength * (0.7 + bandSmooth * 0.4 + bands.beatIntensity * 0.2 * config.beatReactivity)
             }
             
@@ -442,12 +436,16 @@ export const laserArray: VisualizationMode = {
             beam.intensity = (0.6 + bandSmooth * 0.35 + bands.beatIntensity * 0.15 * config.beatReactivity) * (1 + Math.sin(time * 20 + beam.flickerPhase) * 0.05 * bands.highSmooth * config.highInfluence) * fix.intensity
             
             const r = beam.length
-            const endX = fix.x + Math.sin(beam.angle) * Math.sin(beam.pitch) * r
-            // Main lasers go DOWN (subtract Y), uplights go UP (add Y)
-            const endY = fix.isUplight 
-              ? fix.y + Math.cos(beam.pitch) * r  // Uplight: add to go up
-              : fix.y - Math.cos(beam.pitch) * r  // Main: subtract to go down
-            const endZ = fix.z + Math.cos(beam.angle) * Math.sin(beam.pitch) * r * 0.3
+            const sinP = Math.sin(beam.pitch)
+            const cosP = Math.cos(beam.pitch)
+            const sinA = Math.sin(beam.angle)
+            const cosA = Math.cos(beam.angle)
+            
+            const endX = fix.x + sinA * sinP * r
+            // Uplights go UP (+Y), main lasers go DOWN (-Y)
+            const yDirection = fix.isUplight ? 1 : -1
+            const endY = fix.y + yDirection * cosP * r
+            const endZ = fix.z + cosA * sinP * r * 0.3
             
             pos[vi * 3] = fix.x; pos[vi * 3 + 1] = fix.y; pos[vi * 3 + 2] = fix.z
             const [sr, sg, sb] = getBeamColor(beam, fix, bands, cycleHue, 0)
@@ -457,7 +455,7 @@ export const laserArray: VisualizationMode = {
             col[vi * 3] = er; col[vi * 3 + 1] = eg; col[vi * 3 + 2] = eb; vi++
             
             if (config.mirrorMode && !fix.isUplight) {
-              const mx = fix.x - Math.sin(beam.angle) * Math.sin(beam.pitch) * r
+              const mx = fix.x - sinA * sinP * r
               pos[vi * 3] = fix.x; pos[vi * 3 + 1] = fix.y; pos[vi * 3 + 2] = fix.z
               col[vi * 3] = sr; col[vi * 3 + 1] = sg; col[vi * 3 + 2] = sb; vi++
               pos[vi * 3] = mx; pos[vi * 3 + 1] = endY; pos[vi * 3 + 2] = endZ
@@ -515,11 +513,12 @@ export const laserArray: VisualizationMode = {
           tp.t += dt * (0.7 + bands.overallSmooth * config.bassInfluence + bands.beatIntensity * 0.6 * config.beatReactivity)
           if (tp.t > 1) tp.t = 0
           const r = tp.t * beam.length, scatter = (1 - tp.t) * 1.5 * (Math.sin(pi * 3.7 + time * 4) * 0.5 + 0.5)
-          const bx = fix.x + Math.sin(beam.angle) * Math.sin(beam.pitch) * r
-          const by = fix.isUplight 
-            ? fix.y + Math.cos(beam.pitch) * r 
-            : fix.y - Math.cos(beam.pitch) * r
-          const bz = fix.z + Math.cos(beam.angle) * Math.sin(beam.pitch) * r * 0.3
+          const sinP = Math.sin(beam.pitch), cosP = Math.cos(beam.pitch)
+          const sinA = Math.sin(beam.angle), cosA = Math.cos(beam.angle)
+          const bx = fix.x + sinA * sinP * r
+          const yDir = fix.isUplight ? 1 : -1
+          const by = fix.y + yDir * cosP * r
+          const bz = fix.z + cosA * sinP * r * 0.3
           positions[pi * 3] = bx + Math.sin(pi * 2.3) * scatter
           positions[pi * 3 + 1] = by + Math.cos(pi * 1.9) * scatter
           positions[pi * 3 + 2] = bz + Math.sin(pi * 1.7 + time) * scatter

@@ -153,7 +153,7 @@ function getPerspectiveY(baseY: number, z: number): number {
 
 function getColorForPosition(
   lanePosition: number,
-  heightRatio: number,
+  _heightRatio: number,
   cycleHue: number,
   bands: AudioBands,
   speedRatio: number

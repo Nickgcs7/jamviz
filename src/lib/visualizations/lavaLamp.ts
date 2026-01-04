@@ -14,7 +14,7 @@ export interface LavaLampConfig {
   colorCycleSpeed: number; smoothingFactor: number
 }
 
-// Fallback gradient in case builtInGradients isn't ready - using correct ColorStop format
+// Fallback gradient in case builtInGradients isn't ready
 const FALLBACK_GRADIENT: GradientPreset = {
   name: 'lavaLamp',
   bgColor: '#1a0500',
@@ -37,14 +37,15 @@ function getDefaultGradient(): GradientPreset {
   return FALLBACK_GRADIENT
 }
 
+// Much calmer default physics for smooth lava lamp movement
 function createDefaultConfig(): LavaLampConfig {
   return {
-    blobCount: 6, minSize: 4, maxSize: 10, mergeThreshold: 2.5,
-    riseSpeed: 1.0, sinkSpeed: 0.8, wanderStrength: 1.0, wanderSpeed: 0.5, turbulence: 0.4,
-    gravity: 0.15, buoyancy: 0.6, viscosity: 0.96, bounceEdges: true, wrapEdges: false,
+    blobCount: 6, minSize: 5, maxSize: 12, mergeThreshold: 2.0,
+    riseSpeed: 0.3, sinkSpeed: 0.2, wanderStrength: 0.15, wanderSpeed: 0.08, turbulence: 0.02,
+    gravity: 0.008, buoyancy: 0.012, viscosity: 0.985, bounceEdges: true, wrapEdges: false,
     colorMode: 'gradient', gradient: getDefaultGradient(), glowIntensity: 1.0, transparency: 0.85,
-    bassInfluence: 1.0, midInfluence: 0.8, highInfluence: 0.5, beatReactivity: 1.0,
-    colorCycleSpeed: 0.15, smoothingFactor: 0.1
+    bassInfluence: 0.3, midInfluence: 0.2, highInfluence: 0.1, beatReactivity: 0.15,
+    colorCycleSpeed: 0.05, smoothingFactor: 0.03
   }
 }
 
@@ -53,22 +54,22 @@ const MIN_BLOBS = 2, MAX_BLOBS = 12
 
 interface EnhancedBlob extends MetaBlob {
   vx: number; vy: number; temperature: number; wanderPhase: number; targetX: number; targetY: number
+  smoothX: number; smoothY: number; smoothSize: number
 }
 
 let blobs: EnhancedBlob[] = []
 let currentBlobCount = 6, lastSpawnTime = 0, lastDespawnTime = 0, gravityDirection = 1
 let quadMesh: THREE.Mesh | null = null, shaderMaterial: THREE.ShaderMaterial | null = null
+let smoothedGravityDirection = 1
 
 function ensureValidGradient(): GradientPreset {
   if (config.gradient && config.gradient.colorStops && Array.isArray(config.gradient.colorStops) && config.gradient.colorStops.length > 0) {
     return config.gradient
   }
-  // Try to get from builtInGradients
   if (builtInGradients && builtInGradients.fire && builtInGradients.fire.colorStops) {
     config.gradient = builtInGradients.fire
     return config.gradient
   }
-  // Use fallback
   config.gradient = FALLBACK_GRADIENT
   return FALLBACK_GRADIENT
 }
@@ -76,14 +77,20 @@ function ensureValidGradient(): GradientPreset {
 function initBlobs(count: number): EnhancedBlob[] {
   const newBlobs: EnhancedBlob[] = []
   for (let i = 0; i < count; i++) {
+    const x = (Math.random() - 0.5) * 20
+    const y = (Math.random() - 0.5) * 50
+    const size = config.minSize + Math.random() * (config.maxSize - config.minSize)
     newBlobs.push({
-      x: (Math.random() - 0.5) * 25, y: (Math.random() - 0.5) * 50,
-      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3, velocity: 0,
+      x, y,
+      vx: 0, vy: 0, velocity: 0,
       phase: Math.random() * Math.PI * 2,
-      baseSize: config.minSize + Math.random() * (config.maxSize - config.minSize),
-      colorIndex: i % 8, colorPhase: i * 0.7, temperature: 0.5 + (Math.random() - 0.5) * 0.3,
+      baseSize: size,
+      colorIndex: i % 8, colorPhase: i * 0.7, 
+      temperature: 0.3 + Math.random() * 0.4,
       wanderPhase: Math.random() * Math.PI * 2,
-      targetX: (Math.random() - 0.5) * 30, targetY: (Math.random() - 0.5) * 40
+      targetX: (Math.random() - 0.5) * 15, 
+      targetY: (Math.random() - 0.5) * 30,
+      smoothX: x, smoothY: y, smoothSize: size
     })
   }
   return newBlobs
@@ -91,13 +98,20 @@ function initBlobs(count: number): EnhancedBlob[] {
 
 function spawnBlob(): void {
   if (blobs.length >= MAX_BLOBS) return
+  const x = (Math.random() - 0.5) * 15
+  const y = gravityDirection > 0 ? -30 : 30
+  const size = config.minSize + Math.random() * (config.maxSize - config.minSize)
   blobs.push({
-    x: (Math.random() - 0.5) * 20, y: gravityDirection > 0 ? -32 : 32,
-    vx: (Math.random() - 0.5) * 0.3, vy: gravityDirection * 0.5, velocity: gravityDirection * 0.5,
-    phase: Math.random() * Math.PI * 2, baseSize: config.minSize + Math.random() * (config.maxSize - config.minSize),
+    x, y,
+    vx: 0, vy: 0, velocity: 0,
+    phase: Math.random() * Math.PI * 2, 
+    baseSize: size,
     colorIndex: blobs.length % 8, colorPhase: Math.random() * Math.PI * 2,
-    temperature: gravityDirection > 0 ? 0.9 : 0.1, wanderPhase: Math.random() * Math.PI * 2,
-    targetX: (Math.random() - 0.5) * 30, targetY: (Math.random() - 0.5) * 40
+    temperature: gravityDirection > 0 ? 0.8 : 0.2, 
+    wanderPhase: Math.random() * Math.PI * 2,
+    targetX: (Math.random() - 0.5) * 15, 
+    targetY: (Math.random() - 0.5) * 30,
+    smoothX: x, smoothY: y, smoothSize: size
   })
   currentBlobCount = blobs.length
 }
@@ -106,7 +120,7 @@ function despawnBlob(): void {
   if (blobs.length <= MIN_BLOBS) return
   let idx = 0
   for (let i = 1; i < blobs.length; i++) if (blobs[i].baseSize < blobs[idx].baseSize) idx = i
-  blobs[idx].baseSize *= 0.85
+  blobs[idx].baseSize *= 0.9
   if (blobs[idx].baseSize < config.minSize * 0.5) { blobs.splice(idx, 1); currentBlobCount = blobs.length }
 }
 
@@ -124,7 +138,7 @@ function getBlobColor(blob: EnhancedBlob, time: number, bands: AudioBands): THRE
       break
     default: {
       const gradient = ensureValidGradient()
-      const t = (blob.y + 30) / 60 + time * config.colorCycleSpeed * 0.2 + blob.colorPhase * 0.1
+      const t = (blob.smoothY + 30) / 60 + time * config.colorCycleSpeed * 0.1 + blob.colorPhase * 0.1
       const [r, g, b] = sampleGradient(gradient, t)
       color.setRGB(r, g, b)
     }
@@ -138,8 +152,15 @@ export const lavaLamp: VisualizationMode = {
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     ensureValidGradient()
-    blobs = initBlobs(config.blobCount); currentBlobCount = config.blobCount; gravityDirection = 1; lastSpawnTime = lastDespawnTime = 0
-    for (let i = 0; i < count; i++) { positions[i * 3] = 0; positions[i * 3 + 1] = -1000; positions[i * 3 + 2] = 0; colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 0 }
+    blobs = initBlobs(config.blobCount)
+    currentBlobCount = config.blobCount
+    gravityDirection = 1
+    smoothedGravityDirection = 1
+    lastSpawnTime = lastDespawnTime = 0
+    for (let i = 0; i < count; i++) { 
+      positions[i * 3] = 0; positions[i * 3 + 1] = -1000; positions[i * 3 + 2] = 0
+      colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 0 
+    }
   },
 
   createSceneObjects(scene: THREE.Scene): SceneObjects {
@@ -147,20 +168,36 @@ export const lavaLamp: VisualizationMode = {
     
     const geometry = createFullscreenQuad()
     const blobPositions = [], blobSizes = [], blobColors = []
-    for (let i = 0; i < MAX_BLOBS; i++) { blobPositions.push(new THREE.Vector3()); blobSizes.push(6); blobColors.push(new THREE.Vector3(0.5, 0.5, 0.5)) }
+    for (let i = 0; i < MAX_BLOBS; i++) { 
+      blobPositions.push(new THREE.Vector3())
+      blobSizes.push(8)
+      blobColors.push(new THREE.Vector3(0.5, 0.5, 0.5)) 
+    }
     
     shaderMaterial = new THREE.ShaderMaterial({
-      vertexShader: metaballVertexShader, fragmentShader: lavaLampFragmentShader,
+      vertexShader: metaballVertexShader, 
+      fragmentShader: lavaLampFragmentShader,
       uniforms: {
-        uTime: { value: 0 }, uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
-        uBlobPositions: { value: blobPositions }, uBlobSizes: { value: blobSizes }, uBlobColors: { value: blobColors },
-        uBlobCount: { value: currentBlobCount }, uBassSmooth: { value: 0 }, uBeatIntensity: { value: 0 }, uGravityDirection: { value: gravityDirection }
+        uTime: { value: 0 }, 
+        uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        uBlobPositions: { value: blobPositions }, 
+        uBlobSizes: { value: blobSizes }, 
+        uBlobColors: { value: blobColors },
+        uBlobCount: { value: currentBlobCount }, 
+        uBassSmooth: { value: 0 }, 
+        uBeatIntensity: { value: 0 }, 
+        uGravityDirection: { value: gravityDirection }
       },
       depthTest: false, depthWrite: false
     })
-    quadMesh = new THREE.Mesh(geometry, shaderMaterial); quadMesh.frustumCulled = false; quadMesh.renderOrder = -1000
+    quadMesh = new THREE.Mesh(geometry, shaderMaterial)
+    quadMesh.frustumCulled = false
+    quadMesh.renderOrder = -1000
     scene.add(quadMesh)
-    const handleResize = () => { if (shaderMaterial) shaderMaterial.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight) }
+    
+    const handleResize = () => { 
+      if (shaderMaterial) shaderMaterial.uniforms.uResolution.value.set(window.innerWidth, window.innerHeight) 
+    }
     window.addEventListener('resize', handleResize)
 
     return {
@@ -168,79 +205,128 @@ export const lavaLamp: VisualizationMode = {
       update: (bands: AudioBands, time: number) => {
         if (!shaderMaterial) return
         
-        // Ensure gradient is valid before any color operations
         ensureValidGradient()
-        
-        const dt = 0.016
 
-        if (bands.overallSmooth > 0.65 && time - lastSpawnTime > 2) { spawnBlob(); lastSpawnTime = time }
-        else if (bands.overallSmooth < 0.12 && time - lastDespawnTime > 3) { despawnBlob(); lastDespawnTime = time }
+        // Spawn/despawn based on audio - but with longer cooldowns
+        if (bands.overallSmooth > 0.7 && time - lastSpawnTime > 4) { 
+          spawnBlob()
+          lastSpawnTime = time 
+        } else if (bands.overallSmooth < 0.1 && time - lastDespawnTime > 5) { 
+          despawnBlob()
+          lastDespawnTime = time 
+        }
 
-        const bassInfluence = bands.bassSmooth + (bands.subBassSmooth || 0) * 0.5
-        gravityDirection = bassInfluence > 0.7 ? -0.4 : bassInfluence < 0.2 ? 1.3 : 1 - bassInfluence * 0.9
+        // Very gentle gravity changes based on bass - smoothed heavily
+        const bassLevel = bands.bassSmooth + (bands.subBassSmooth || 0) * 0.3
+        const targetGravity = bassLevel > 0.6 ? 0.7 : bassLevel < 0.15 ? 1.2 : 1.0
+        smoothedGravityDirection += (targetGravity - smoothedGravityDirection) * 0.005
 
         for (let i = 0; i < blobs.length; i++) {
           const blob = blobs[i]
           
-          const tempFactor = blob.temperature - 0.5
-          const buoyancy = config.buoyancy * (1 + tempFactor * 2) / (blob.baseSize * 0.1)
-          const effectiveGravity = config.gravity * gravityDirection
+          // Temperature affects buoyancy - hot blobs rise, cold sink
+          const heatBuoyancy = (blob.temperature - 0.5) * config.buoyancy * 2
           
-          const bassForce = bands.bassSmooth * 0.5 * config.bassInfluence
-          const midForce = bands.midSmooth * 0.3 * config.midInfluence
+          // Very gentle forces
+          const gravityForce = config.gravity * smoothedGravityDirection
+          const buoyancyForce = heatBuoyancy + config.buoyancy * 0.5
           
-          blob.vy += (buoyancy - effectiveGravity + bassForce * gravityDirection) * dt * 60
+          // Subtle audio influence
+          const audioLift = bands.bassSmooth * config.bassInfluence * 0.02
           
+          // Apply vertical forces
+          blob.vy += (buoyancyForce - gravityForce + audioLift) * 0.1
+          
+          // Very slow wandering motion
           const wanderX = Math.sin(time * config.wanderSpeed + blob.wanderPhase) * config.wanderStrength
-          const wanderY = Math.cos(time * config.wanderSpeed * 0.7 + blob.wanderPhase * 1.3) * config.wanderStrength * 0.5
-          const toTargetX = (blob.targetX - blob.x) * 0.01
-          const toTargetY = (blob.targetY - blob.y) * 0.01
+          const wanderY = Math.cos(time * config.wanderSpeed * 0.6 + blob.wanderPhase) * config.wanderStrength * 0.3
           
-          blob.vx += (wanderX * 0.1 + toTargetX + midForce * bands.stereoBalance) * dt * 60
-          blob.vy += (wanderY * 0.05 + toTargetY) * dt * 60
+          // Gentle drift toward target
+          const toTargetX = (blob.targetX - blob.x) * 0.001
+          const toTargetY = (blob.targetY - blob.y) * 0.0005
           
-          if (bands.isBeat && bands.beatIntensity > 0.5) {
-            blob.vx += (Math.random() - 0.5) * bands.beatIntensity * config.beatReactivity * 3
-            blob.vy += (Math.random() - 0.5) * bands.beatIntensity * config.beatReactivity
-            if (Math.random() < 0.3) { blob.targetX = (Math.random() - 0.5) * 30; blob.targetY = (Math.random() - 0.5) * 40 }
-          }
+          blob.vx += (wanderX * 0.01 + toTargetX)
+          blob.vy += (wanderY * 0.005 + toTargetY)
           
-          if (config.turbulence > 0) {
-            blob.vx += (Math.random() - 0.5) * config.turbulence * 0.5 * dt * 60
-            blob.vy += (Math.random() - 0.5) * config.turbulence * 0.3 * dt * 60
-          }
-          
-          blob.vx *= config.viscosity; blob.vy *= config.viscosity
-          blob.vx = Math.max(-2, Math.min(2, blob.vx)); blob.vy = Math.max(-2, Math.min(2, blob.vy))
-          
-          blob.x += blob.vx * dt * 60; blob.y += blob.vy * dt * 60
-          blob.velocity = blob.vy
-          
-          blob.temperature += ((1 - (blob.y + 30) / 60 + bands.bassSmooth * 0.3) - blob.temperature) * 0.02
-          
-          if (config.bounceEdges) {
-            if (blob.y > 32) { blob.y = 32; blob.vy *= -0.5; blob.temperature *= 0.8 }
-            if (blob.y < -32) { blob.y = -32; blob.vy *= -0.5; blob.temperature = Math.min(1, blob.temperature + 0.2) }
-            if (blob.x > 20) { blob.x = 20; blob.vx *= -0.6 }
-            if (blob.x < -20) { blob.x = -20; blob.vx *= -0.6 }
-          } else if (config.wrapEdges) {
-            if (blob.y > 35) blob.y = -35; if (blob.y < -35) blob.y = 35
-            if (blob.x > 22) blob.x = -22; if (blob.x < -22) blob.x = 22
-          }
-
-          for (let j = i + 1; j < blobs.length; j++) {
-            const dx = blobs[j].x - blob.x, dy = blobs[j].y - blob.y
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            const minDist = (blob.baseSize + blobs[j].baseSize) * config.mergeThreshold * 0.3
-            if (dist < minDist && dist > 0.1) {
-              const push = (minDist - dist) * 0.12, nx = dx / dist, ny = dy / dist
-              blob.x -= nx * push; blob.y -= ny * push; blobs[j].x += nx * push; blobs[j].y += ny * push
+          // Subtle beat reaction - just a gentle nudge
+          if (bands.isBeat && bands.beatIntensity > 0.6) {
+            blob.vx += (Math.random() - 0.5) * config.beatReactivity * 0.1
+            blob.vy += (Math.random() - 0.5) * config.beatReactivity * 0.05
+            // Occasionally pick new target
+            if (Math.random() < 0.1) { 
+              blob.targetX = (Math.random() - 0.5) * 15
+              blob.targetY = (Math.random() - 0.5) * 30 
             }
           }
           
-          const sizeBoost = bands.bassSmooth * 3 * config.bassInfluence + bands.midSmooth * 1.5 * config.midInfluence + bands.beatIntensity * 4 * config.beatReactivity
-          shaderMaterial.uniforms.uBlobSizes.value[i] += ((blob.baseSize + sizeBoost) - shaderMaterial.uniforms.uBlobSizes.value[i]) * config.smoothingFactor
-          shaderMaterial.uniforms.uBlobPositions.value[i].set(blob.x, blob.y, blob.velocity)
+          // Tiny bit of turbulence
+          if (config.turbulence > 0) {
+            blob.vx += (Math.random() - 0.5) * config.turbulence * 0.1
+            blob.vy += (Math.random() - 0.5) * config.turbulence * 0.05
+          }
+          
+          // High viscosity for smooth motion
+          blob.vx *= config.viscosity
+          blob.vy *= config.viscosity
+          
+          // Clamp velocity to prevent fast movement
+          const maxSpeed = 0.3
+          blob.vx = Math.max(-maxSpeed, Math.min(maxSpeed, blob.vx))
+          blob.vy = Math.max(-maxSpeed, Math.min(maxSpeed, blob.vy))
+          
+          // Update position
+          blob.x += blob.vx
+          blob.y += blob.vy
+          blob.velocity = blob.vy
+          
+          // Temperature slowly adjusts based on position (bottom = hot, top = cold)
+          const targetTemp = 1 - (blob.y + 30) / 60
+          blob.temperature += (targetTemp - blob.temperature) * 0.005
+          
+          // Soft boundary bounces
+          if (config.bounceEdges) {
+            if (blob.y > 28) { blob.y = 28; blob.vy *= -0.3; blob.temperature *= 0.9 }
+            if (blob.y < -28) { blob.y = -28; blob.vy *= -0.3; blob.temperature = Math.min(1, blob.temperature + 0.1) }
+            if (blob.x > 18) { blob.x = 18; blob.vx *= -0.3 }
+            if (blob.x < -18) { blob.x = -18; blob.vx *= -0.3 }
+          } else if (config.wrapEdges) {
+            if (blob.y > 32) blob.y = -32
+            if (blob.y < -32) blob.y = 32
+            if (blob.x > 20) blob.x = -20
+            if (blob.x < -20) blob.x = 20
+          }
+
+          // Gentle blob-blob repulsion
+          for (let j = i + 1; j < blobs.length; j++) {
+            const dx = blobs[j].x - blob.x
+            const dy = blobs[j].y - blob.y
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            const minDist = (blob.baseSize + blobs[j].baseSize) * config.mergeThreshold * 0.25
+            if (dist < minDist && dist > 0.1) {
+              const push = (minDist - dist) * 0.02
+              const nx = dx / dist, ny = dy / dist
+              blob.x -= nx * push
+              blob.y -= ny * push
+              blobs[j].x += nx * push
+              blobs[j].y += ny * push
+            }
+          }
+          
+          // Smooth the displayed position for extra smoothness
+          blob.smoothX += (blob.x - blob.smoothX) * 0.08
+          blob.smoothY += (blob.y - blob.smoothY) * 0.08
+          
+          // Gentle size pulsing with audio
+          const targetSize = blob.baseSize + 
+            bands.bassSmooth * config.bassInfluence * 2 + 
+            bands.midSmooth * config.midInfluence + 
+            bands.beatIntensity * config.beatReactivity * 1.5
+          blob.smoothSize += (targetSize - blob.smoothSize) * config.smoothingFactor
+          
+          // Update shader uniforms with smoothed values
+          shaderMaterial.uniforms.uBlobSizes.value[i] = blob.smoothSize
+          shaderMaterial.uniforms.uBlobPositions.value[i].set(blob.smoothX, blob.smoothY, blob.velocity)
+          
           const color = getBlobColor(blob, time, bands)
           shaderMaterial.uniforms.uBlobColors.value[i].set(color.r, color.g, color.b)
         }
@@ -249,11 +335,12 @@ export const lavaLamp: VisualizationMode = {
         shaderMaterial.uniforms.uBlobCount.value = blobs.length
         shaderMaterial.uniforms.uBassSmooth.value = bands.bassSmooth
         shaderMaterial.uniforms.uBeatIntensity.value = bands.beatIntensity
-        shaderMaterial.uniforms.uGravityDirection.value = gravityDirection
+        shaderMaterial.uniforms.uGravityDirection.value = smoothedGravityDirection
       },
       dispose: () => {
         window.removeEventListener('resize', handleResize)
-        geometry?.dispose(); shaderMaterial?.dispose()
+        geometry?.dispose()
+        shaderMaterial?.dispose()
         if (quadMesh) scene.remove(quadMesh)
         quadMesh = shaderMaterial = null
       }
@@ -279,29 +366,44 @@ export function setLavaLampGradient(g: GradientPreset) {
 }
 export function setLavaLampColorMode(m: LavaLampConfig['colorMode']) { config.colorMode = m }
 export function setLavaLampBlobs(p: { blobCount?: number; minSize?: number; maxSize?: number; mergeThreshold?: number }) {
-  if (p.blobCount !== undefined) { config.blobCount = p.blobCount; while (blobs.length < config.blobCount && blobs.length < MAX_BLOBS) spawnBlob(); while (blobs.length > config.blobCount && blobs.length > MIN_BLOBS) { blobs.pop(); currentBlobCount = blobs.length } }
-  if (p.minSize !== undefined) config.minSize = p.minSize; if (p.maxSize !== undefined) config.maxSize = p.maxSize; if (p.mergeThreshold !== undefined) config.mergeThreshold = p.mergeThreshold
+  if (p.blobCount !== undefined) { 
+    config.blobCount = p.blobCount
+    while (blobs.length < config.blobCount && blobs.length < MAX_BLOBS) spawnBlob()
+    while (blobs.length > config.blobCount && blobs.length > MIN_BLOBS) { blobs.pop(); currentBlobCount = blobs.length } 
+  }
+  if (p.minSize !== undefined) config.minSize = p.minSize
+  if (p.maxSize !== undefined) config.maxSize = p.maxSize
+  if (p.mergeThreshold !== undefined) config.mergeThreshold = p.mergeThreshold
 }
 export function setLavaLampMovement(p: { riseSpeed?: number; sinkSpeed?: number; wanderStrength?: number; wanderSpeed?: number; turbulence?: number }) {
-  if (p.riseSpeed !== undefined) config.riseSpeed = p.riseSpeed; if (p.sinkSpeed !== undefined) config.sinkSpeed = p.sinkSpeed
-  if (p.wanderStrength !== undefined) config.wanderStrength = p.wanderStrength; if (p.wanderSpeed !== undefined) config.wanderSpeed = p.wanderSpeed
+  if (p.riseSpeed !== undefined) config.riseSpeed = p.riseSpeed
+  if (p.sinkSpeed !== undefined) config.sinkSpeed = p.sinkSpeed
+  if (p.wanderStrength !== undefined) config.wanderStrength = p.wanderStrength
+  if (p.wanderSpeed !== undefined) config.wanderSpeed = p.wanderSpeed
   if (p.turbulence !== undefined) config.turbulence = p.turbulence
 }
 export function setLavaLampPhysics(p: { gravity?: number; buoyancy?: number; viscosity?: number; bounceEdges?: boolean; wrapEdges?: boolean }) {
-  if (p.gravity !== undefined) config.gravity = p.gravity; if (p.buoyancy !== undefined) config.buoyancy = p.buoyancy; if (p.viscosity !== undefined) config.viscosity = p.viscosity
+  if (p.gravity !== undefined) config.gravity = p.gravity
+  if (p.buoyancy !== undefined) config.buoyancy = p.buoyancy
+  if (p.viscosity !== undefined) config.viscosity = p.viscosity
   if (p.bounceEdges !== undefined) { config.bounceEdges = p.bounceEdges; if (p.bounceEdges) config.wrapEdges = false }
   if (p.wrapEdges !== undefined) { config.wrapEdges = p.wrapEdges; if (p.wrapEdges) config.bounceEdges = false }
 }
 export function setLavaLampColors(p: { colorMode?: LavaLampConfig['colorMode']; glowIntensity?: number; transparency?: number; colorCycleSpeed?: number }) {
-  if (p.colorMode !== undefined) config.colorMode = p.colorMode; if (p.glowIntensity !== undefined) config.glowIntensity = p.glowIntensity
-  if (p.transparency !== undefined) config.transparency = p.transparency; if (p.colorCycleSpeed !== undefined) config.colorCycleSpeed = p.colorCycleSpeed
+  if (p.colorMode !== undefined) config.colorMode = p.colorMode
+  if (p.glowIntensity !== undefined) config.glowIntensity = p.glowIntensity
+  if (p.transparency !== undefined) config.transparency = p.transparency
+  if (p.colorCycleSpeed !== undefined) config.colorCycleSpeed = p.colorCycleSpeed
 }
 export function setLavaLampAudioResponse(p: { bassInfluence?: number; midInfluence?: number; highInfluence?: number; beatReactivity?: number; smoothingFactor?: number }) {
-  if (p.bassInfluence !== undefined) config.bassInfluence = p.bassInfluence; if (p.midInfluence !== undefined) config.midInfluence = p.midInfluence
-  if (p.highInfluence !== undefined) config.highInfluence = p.highInfluence; if (p.beatReactivity !== undefined) config.beatReactivity = p.beatReactivity
+  if (p.bassInfluence !== undefined) config.bassInfluence = p.bassInfluence
+  if (p.midInfluence !== undefined) config.midInfluence = p.midInfluence
+  if (p.highInfluence !== undefined) config.highInfluence = p.highInfluence
+  if (p.beatReactivity !== undefined) config.beatReactivity = p.beatReactivity
   if (p.smoothingFactor !== undefined) config.smoothingFactor = p.smoothingFactor
 }
 export function resetLavaLampConfig() { 
   config = createDefaultConfig()
-  blobs = initBlobs(config.blobCount); currentBlobCount = config.blobCount 
+  blobs = initBlobs(config.blobCount)
+  currentBlobCount = config.blobCount 
 }

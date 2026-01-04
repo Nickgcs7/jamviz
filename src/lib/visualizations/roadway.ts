@@ -24,6 +24,19 @@ export interface RoadwayConfig {
   showSidelines: boolean
   lineGlow: number
 
+  // Road markings
+  showRoadLines: boolean
+  roadLineWidth: number
+  roadLineDashLength: number
+  roadLineGapLength: number
+  roadLineIntensity: number
+
+  // Horizon glow
+  showHorizonGlow: boolean
+  horizonGlowIntensity: number
+  horizonGlowHeight: number
+  horizonGlowColor: [number, number, number]
+
   // Color configuration
   colorMode: 'gradient' | 'speed-reactive' | 'beat-reactive' | 'frequency'
   gradient: GradientPreset
@@ -61,6 +74,17 @@ const DEFAULT_CONFIG: RoadwayConfig = {
   showSidelines: true,
   lineGlow: 0.9,
 
+  showRoadLines: true,
+  roadLineWidth: 0.4,
+  roadLineDashLength: 4,
+  roadLineGapLength: 6,
+  roadLineIntensity: 0.8,
+
+  showHorizonGlow: true,
+  horizonGlowIntensity: 0.4,
+  horizonGlowHeight: 15,
+  horizonGlowColor: [0.8, 0.6, 1.0],
+
   colorMode: 'gradient',
   gradient: builtInGradients.synthwave,
   colorCycleSpeed: 0.3,
@@ -92,6 +116,15 @@ let lineGeometry: THREE.BufferGeometry | null = null
 let lineMaterial: THREE.LineBasicMaterial | null = null
 let lineSegments: THREE.LineSegments | null = null
 
+// Road marking lines (dashed white lines)
+let roadLineGeometry: THREE.BufferGeometry | null = null
+let roadLineMaterial: THREE.LineBasicMaterial | null = null
+let roadLineSegments: THREE.LineSegments | null = null
+
+// Horizon glow
+let horizonGlowMesh: THREE.Mesh | null = null
+let horizonGlowMaterial: THREE.ShaderMaterial | null = null
+
 let currentCameraY = 0
 let currentSpeed = 8
 
@@ -101,6 +134,9 @@ const VIEW_ZONE_FAR = 0.85
 const INTENSITY_NEAR = 0.7
 const INTENSITY_VIEW = 1.0
 const INTENSITY_FAR = 0.5
+
+// Road line constants
+const ROAD_LINE_COUNT = 30 // Number of dashes per lane
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -196,6 +232,50 @@ function initRoadway() {
   }
 }
 
+// Create horizon glow shader
+function createHorizonGlowMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      glowColor: { value: new THREE.Color(config.horizonGlowColor[0], config.horizonGlowColor[1], config.horizonGlowColor[2]) },
+      intensity: { value: config.horizonGlowIntensity },
+      time: { value: 0 }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 glowColor;
+      uniform float intensity;
+      uniform float time;
+      varying vec2 vUv;
+      
+      void main() {
+        // Vertical gradient - strongest at bottom (horizon line), fading up
+        float gradient = 1.0 - vUv.y;
+        gradient = pow(gradient, 2.0);
+        
+        // Horizontal falloff - fade at edges
+        float horizontalFade = 1.0 - pow(abs(vUv.x - 0.5) * 2.0, 2.0);
+        
+        // Subtle pulse
+        float pulse = 0.9 + 0.1 * sin(time * 2.0);
+        
+        float alpha = gradient * horizontalFade * intensity * pulse;
+        
+        gl_FragColor = vec4(glowColor, alpha);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  })
+}
+
 // ============================================================================
 // VISUALIZATION EXPORT
 // ============================================================================
@@ -247,13 +327,50 @@ export const roadway: VisualizationMode = {
     lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial)
     scene.add(lineSegments)
     
+    // Create road marking lines (dashed white center line)
+    if (config.showRoadLines) {
+      // Each dash is a line segment, we have multiple dashes
+      const roadLineVertexCount = ROAD_LINE_COUNT * 2
+      const roadLinePositions = new Float32Array(roadLineVertexCount * 3)
+      const roadLineColors = new Float32Array(roadLineVertexCount * 3)
+      
+      roadLineGeometry = new THREE.BufferGeometry()
+      roadLineGeometry.setAttribute('position', new THREE.BufferAttribute(roadLinePositions, 3))
+      roadLineGeometry.setAttribute('color', new THREE.BufferAttribute(roadLineColors, 3))
+      
+      roadLineMaterial = new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: config.roadLineIntensity,
+        blending: THREE.AdditiveBlending,
+        linewidth: 2
+      })
+      
+      roadLineSegments = new THREE.LineSegments(roadLineGeometry, roadLineMaterial)
+      scene.add(roadLineSegments)
+    }
+    
+    // Create horizon glow
+    if (config.showHorizonGlow) {
+      const glowGeometry = new THREE.PlaneGeometry(200, config.horizonGlowHeight)
+      horizonGlowMaterial = createHorizonGlowMaterial()
+      horizonGlowMesh = new THREE.Mesh(glowGeometry, horizonGlowMaterial)
+      
+      // Position at the horizon
+      const horizonZ = -config.horizonDistance * config.cellSize
+      const horizonY = getPerspectiveY(config.cameraHeight, config.horizonDistance - 1) + config.horizonGlowHeight / 2
+      horizonGlowMesh.position.set(0, horizonY, horizonZ + 5)
+      
+      scene.add(horizonGlowMesh)
+    }
+    
     // Update fog density
     if (scene.fog instanceof THREE.FogExp2) {
       scene.fog.density = config.fogDensity
     }
     
     return {
-      objects: [lineSegments],
+      objects: [lineSegments, roadLineSegments, horizonGlowMesh].filter(Boolean) as THREE.Object3D[],
       update: (bands: AudioBands, time: number) => {
         if (!lineGeometry) return
         
@@ -409,6 +526,82 @@ export const roadway: VisualizationMode = {
           }
         }
         
+        // Update road marking lines (dashed white center line)
+        if (roadLineGeometry && config.showRoadLines) {
+          const roadPosAttr = roadLineGeometry.getAttribute('position') as THREE.BufferAttribute
+          const roadColAttr = roadLineGeometry.getAttribute('color') as THREE.BufferAttribute
+          const roadPos = roadPosAttr.array as Float32Array
+          const roadCol = roadColAttr.array as Float32Array
+          
+          const dashCycle = config.roadLineDashLength + config.roadLineGapLength
+          const roadScrollOffset = (time * currentSpeed) % dashCycle
+          
+          for (let i = 0; i < ROAD_LINE_COUNT; i++) {
+            const dashStartZ = i * dashCycle - roadScrollOffset
+            const dashEndZ = dashStartZ + config.roadLineDashLength
+            
+            // Get perspective for this dash
+            const avgZ = (dashStartZ + dashEndZ) / 2 / config.cellSize
+            const zIndex = Math.max(0, Math.min(config.horizonDistance - 1, Math.floor(avgZ)))
+            const perspScale = getPerspectiveScale(zIndex)
+            const zoneIntensity = getZoneIntensity(zIndex)
+            
+            // Center of road (x = 0)
+            const xOffset = 0
+            
+            // Get height at center of road
+            const centerLane = Math.floor(config.laneCount / 2)
+            const height = terrainHeights[zIndex] ? terrainHeights[zIndex][centerLane] || 0 : 0
+            
+            const y1 = getPerspectiveY(config.cameraHeight + height + 0.5, zIndex)
+            const y2 = getPerspectiveY(config.cameraHeight + height + 0.5, zIndex)
+            
+            // Apply perspective to x position (should be at center, but scaled)
+            const x1 = xOffset * perspScale
+            const x2 = xOffset * perspScale
+            
+            roadPos[i * 6] = x1
+            roadPos[i * 6 + 1] = y1
+            roadPos[i * 6 + 2] = -dashStartZ
+            
+            roadPos[i * 6 + 3] = x2
+            roadPos[i * 6 + 4] = y2
+            roadPos[i * 6 + 5] = -dashEndZ
+            
+            // White color with fade based on distance
+            const intensity = config.roadLineIntensity * zoneIntensity * (0.8 + bands.bassSmooth * 0.2)
+            
+            // Hide dashes that are behind camera or too far
+            const visible = dashStartZ > -5 && dashEndZ < config.horizonDistance * config.cellSize
+            const alpha = visible ? intensity : 0
+            
+            roadCol[i * 6] = alpha
+            roadCol[i * 6 + 1] = alpha
+            roadCol[i * 6 + 2] = alpha
+            roadCol[i * 6 + 3] = alpha
+            roadCol[i * 6 + 4] = alpha
+            roadCol[i * 6 + 5] = alpha
+          }
+          
+          roadPosAttr.needsUpdate = true
+          roadColAttr.needsUpdate = true
+        }
+        
+        // Update horizon glow
+        if (horizonGlowMesh && horizonGlowMaterial) {
+          horizonGlowMaterial.uniforms.time.value = time
+          horizonGlowMaterial.uniforms.intensity.value = config.horizonGlowIntensity * 
+            (0.8 + bands.bassSmooth * 0.3 + bands.beatIntensity * 0.2)
+          
+          // Update glow color from gradient
+          const [gr, gg, gb] = sampleGradient(config.gradient, 0.7 + cycleHue * 0.1)
+          horizonGlowMaterial.uniforms.glowColor.value.setRGB(gr, gg, gb)
+          
+          // Update position to follow camera sway
+          const horizonY = getPerspectiveY(config.cameraHeight, config.horizonDistance - 1) + config.horizonGlowHeight / 2 - 5
+          horizonGlowMesh.position.y = horizonY
+        }
+        
         // Update material opacity
         if (lineMaterial) {
           lineMaterial.opacity = config.lineGlow
@@ -421,9 +614,23 @@ export const roadway: VisualizationMode = {
         if (lineGeometry) lineGeometry.dispose()
         if (lineMaterial) lineMaterial.dispose()
         if (lineSegments) scene.remove(lineSegments)
+        if (roadLineGeometry) roadLineGeometry.dispose()
+        if (roadLineMaterial) roadLineMaterial.dispose()
+        if (roadLineSegments) scene.remove(roadLineSegments)
+        if (horizonGlowMesh) {
+          horizonGlowMesh.geometry.dispose()
+          scene.remove(horizonGlowMesh)
+        }
+        if (horizonGlowMaterial) horizonGlowMaterial.dispose()
+        
         lineGeometry = null
         lineMaterial = null
         lineSegments = null
+        roadLineGeometry = null
+        roadLineMaterial = null
+        roadLineSegments = null
+        horizonGlowMesh = null
+        horizonGlowMaterial = null
       }
     }
   },
@@ -524,6 +731,32 @@ export function setRoadwayAudioResponse(params: {
   if (params.highInfluence !== undefined) config.highInfluence = params.highInfluence
   if (params.stereoSeparation !== undefined) config.stereoSeparation = params.stereoSeparation
   if (params.smoothingFactor !== undefined) config.smoothingFactor = params.smoothingFactor
+}
+
+export function setRoadwayRoadLines(params: {
+  showRoadLines?: boolean
+  roadLineWidth?: number
+  roadLineDashLength?: number
+  roadLineGapLength?: number
+  roadLineIntensity?: number
+}): void {
+  if (params.showRoadLines !== undefined) config.showRoadLines = params.showRoadLines
+  if (params.roadLineWidth !== undefined) config.roadLineWidth = params.roadLineWidth
+  if (params.roadLineDashLength !== undefined) config.roadLineDashLength = params.roadLineDashLength
+  if (params.roadLineGapLength !== undefined) config.roadLineGapLength = params.roadLineGapLength
+  if (params.roadLineIntensity !== undefined) config.roadLineIntensity = params.roadLineIntensity
+}
+
+export function setRoadwayHorizonGlow(params: {
+  showHorizonGlow?: boolean
+  horizonGlowIntensity?: number
+  horizonGlowHeight?: number
+  horizonGlowColor?: [number, number, number]
+}): void {
+  if (params.showHorizonGlow !== undefined) config.showHorizonGlow = params.showHorizonGlow
+  if (params.horizonGlowIntensity !== undefined) config.horizonGlowIntensity = params.horizonGlowIntensity
+  if (params.horizonGlowHeight !== undefined) config.horizonGlowHeight = params.horizonGlowHeight
+  if (params.horizonGlowColor !== undefined) config.horizonGlowColor = params.horizonGlowColor
 }
 
 export function resetRoadwayConfig(): void {

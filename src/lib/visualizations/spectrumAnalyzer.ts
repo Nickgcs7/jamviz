@@ -1,6 +1,6 @@
 import type { VisualizationMode, SceneObjects } from './types'
 import type { AudioBands } from '../AudioAnalyzer'
-import { hslToRgb, getCyclingHue } from '../colorUtils'
+import { getCyclingHue } from '../colorUtils'
 import { builtInGradients, sampleGradient, sampleGradientByLevel, type GradientPreset } from '../gradients'
 import * as THREE from 'three'
 
@@ -252,7 +252,9 @@ function createLedSegmentGeometry(): THREE.BufferGeometry {
 // 2D CANVAS OVERLAY
 // ============================================================================
 
-function createCanvasOverlay(scene: THREE.Scene, camera: THREE.Camera): void {
+function initCanvasOverlay(scene: THREE.Scene): void {
+  if (overlayCanvas) return // Already initialized
+
   overlayCanvas = document.createElement('canvas')
   overlayCanvas.width = 1024
   overlayCanvas.height = 256
@@ -519,9 +521,9 @@ export const spectrumAnalyzer: VisualizationMode = {
     scene.add(basePlaneMesh)
 
     // ========================================
-    // 2D CANVAS OVERLAY
+    // 2D CANVAS OVERLAY - Initialize here
     // ========================================
-    // Note: We can't access camera here, so overlay is created in update
+    initCanvasOverlay(scene)
 
     // Dummy matrix for initialization
     const dummy = new THREE.Object3D()
@@ -702,7 +704,7 @@ export const spectrumAnalyzer: VisualizationMode = {
 
               // Fade out with distance from base
               const fadeRatio = 1 - (led / reflexLeds)
-              let brightness = isLit ? 0.4 * fadeRatio * config.reflexBright : 0.02 * fadeRatio
+              const brightness = isLit ? 0.4 * fadeRatio * config.reflexBright : 0.02 * fadeRatio
 
               dummy.position.set(x, y, 0)
               dummy.scale.set(1, -1, 1)  // Flip for reflection

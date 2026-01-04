@@ -13,6 +13,7 @@ import { visualizations, type VisualizationMode, type SceneObjects } from '@/lib
 import { postProcessingPresets, getPresetNames, getCurrentPreset, setPreset, getAudioReactiveSettings } from '@/lib/postProcessingPresets'
 import SpectrumControls from './SpectrumControls'
 import RoadwayControls from './RoadwayControls'
+import SauronsEyeControls from './SauronsEyeControls'
 
 const PARTICLE_COUNT = 10000
 const POSITION_LERP_FACTOR = 0.12
@@ -63,6 +64,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const [showPresets, setShowPresets] = useState(false)
   const [showSpectrumControls, setShowSpectrumControls] = useState(false)
   const [showRoadwayControls, setShowRoadwayControls] = useState(false)
+  const [showSauronsEyeControls, setShowSauronsEyeControls] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ledText, setLedText] = useState('JAMVIZ')
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
@@ -204,10 +206,11 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
 
       const isLedMatrix = currentMode.id === 'led_matrix'
       const isSpectrum = currentMode.id === 'spectrum_analyzer'
-      const cameraIntensity = (isLedMatrix || isSpectrum) ? 0.3 : 1.0
+      const isSauronsEye = currentMode.id === 'saurons_eye'
+      const cameraIntensity = (isLedMatrix || isSpectrum) ? 0.3 : isSauronsEye ? 0.5 : 1.0
       const targetCameraX = (Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3) * cameraIntensity
       const targetCameraY = (Math.cos(time * 0.1) * 4 + bands.highSmooth * 4) * cameraIntensity
-      const targetCameraZ = (isLedMatrix || isSpectrum) ? 55 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
+      const targetCameraZ = (isLedMatrix || isSpectrum) ? 55 : isSauronsEye ? 45 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
       refs.currentCameraZ = lerp(refs.currentCameraZ, targetCameraZ, CAMERA_LERP_FACTOR)
@@ -280,6 +283,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     // Close settings panels when switching away from relevant modes
     if (mode.id !== 'spectrum_analyzer') setShowSpectrumControls(false)
     if (mode.id !== 'roadway') setShowRoadwayControls(false)
+    if (mode.id !== 'saurons_eye') setShowSauronsEyeControls(false)
   }, [updateParticleLayout, ledText])
 
   const handlePresetChange = useCallback((presetId: string) => {
@@ -313,15 +317,18 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const presetNames = getPresetNames()
 
   // Check if current mode has a settings panel
-  const hasSettingsPanel = currentMode.id === 'spectrum_analyzer' || currentMode.id === 'roadway'
+  const hasSettingsPanel = currentMode.id === 'spectrum_analyzer' || currentMode.id === 'roadway' || currentMode.id === 'saurons_eye'
   const isSettingsPanelOpen = (currentMode.id === 'spectrum_analyzer' && showSpectrumControls) ||
-                              (currentMode.id === 'roadway' && showRoadwayControls)
+                              (currentMode.id === 'roadway' && showRoadwayControls) ||
+                              (currentMode.id === 'saurons_eye' && showSauronsEyeControls)
 
   const handleSettingsClick = () => {
     if (currentMode.id === 'spectrum_analyzer') {
       setShowSpectrumControls(!showSpectrumControls)
     } else if (currentMode.id === 'roadway') {
       setShowRoadwayControls(!showRoadwayControls)
+    } else if (currentMode.id === 'saurons_eye') {
+      setShowSauronsEyeControls(!showSauronsEyeControls)
     }
   }
 
@@ -413,6 +420,12 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       <RoadwayControls
         visible={showRoadwayControls && currentMode.id === 'roadway'}
         onClose={() => setShowRoadwayControls(false)}
+      />
+      
+      {/* Sauron's Eye Controls Panel */}
+      <SauronsEyeControls
+        visible={showSauronsEyeControls && currentMode.id === 'saurons_eye'}
+        onClose={() => setShowSauronsEyeControls(false)}
       />
     </div>
   )

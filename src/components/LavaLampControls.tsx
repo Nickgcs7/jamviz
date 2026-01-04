@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   getLavaLampConfig,
   setLavaLampBlobs,
@@ -21,31 +21,44 @@ interface LavaLampControlsProps {
 export default function LavaLampControls({ visible, onClose }: LavaLampControlsProps) {
   const [config, setConfig] = useState<LavaLampConfig>(getLavaLampConfig())
   const [activeTab, setActiveTab] = useState<'blobs' | 'movement' | 'physics' | 'color'>('blobs')
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
 
   if (!visible) return null
 
   const gradientNames = Object.keys(builtInGradients)
 
+  // Mobile: full screen overlay, Desktop: side panel
+  const panelClasses = isMobile 
+    ? "fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col"
+    : "absolute top-20 right-4 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden z-50"
+
   return (
-    <div className="absolute top-20 right-4 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden z-50">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+    <div className={panelClasses}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-purple-400 text-lg">🫧</span>
           <h3 className="text-white/90 font-medium text-sm">Lava Lamp Settings</h3>
         </div>
-        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <button onClick={onClose} className="text-white/40 hover:text-white/80 transition-colors p-2 -mr-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      <div className="flex border-b border-white/10">
+      <div className="flex border-b border-white/10 shrink-0">
         {(['blobs', 'movement', 'physics', 'color'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 px-2 py-2 text-xs capitalize transition-colors ${
+            className={`flex-1 px-2 py-2.5 sm:py-2 text-xs capitalize transition-colors ${
               activeTab === tab
                 ? 'text-purple-400 border-b-2 border-purple-400 -mb-px'
                 : 'text-white/40 hover:text-white/70'
@@ -56,7 +69,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
         ))}
       </div>
 
-      <div className="p-4 space-y-4 max-h-80 overflow-y-auto">
+      <div className={`p-4 space-y-4 overflow-y-auto ${isMobile ? 'flex-1' : 'max-h-80'}`}>
         {activeTab === 'blobs' && (
           <>
             <div className="space-y-2">
@@ -74,7 +87,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampBlobs({ blobCount: parseInt(e.target.value) })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -93,7 +106,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampBlobs({ minSize: parseInt(e.target.value) })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -112,7 +125,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampBlobs({ maxSize: parseInt(e.target.value) })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -130,7 +143,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampBlobs({ mergeThreshold: parseInt(e.target.value) / 10 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
           </>
@@ -152,7 +165,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampMovement({ riseSpeed: parseInt(e.target.value) / 10 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -170,7 +183,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampMovement({ sinkSpeed: parseInt(e.target.value) / 10 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -188,7 +201,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampMovement({ wanderStrength: parseInt(e.target.value) / 10 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -206,7 +219,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampMovement({ wanderSpeed: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -224,7 +237,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampMovement({ turbulence: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
           </>
@@ -246,7 +259,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampPhysics({ gravity: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -264,7 +277,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampPhysics({ buoyancy: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -282,7 +295,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampPhysics({ viscosity: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -295,7 +308,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                     setLavaLampPhysics({ bounceEdges: true, wrapEdges: false })
                     setConfig(getLavaLampConfig())
                   }}
-                  className={`flex-1 px-3 py-1.5 rounded text-xs transition-colors ${
+                  className={`flex-1 px-3 py-2 sm:py-1.5 rounded text-xs transition-colors ${
                     config.bounceEdges
                       ? 'bg-purple-500/30 text-purple-400 border border-purple-500/30'
                       : 'bg-white/5 text-white/40 border border-white/10'
@@ -308,7 +321,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                     setLavaLampPhysics({ bounceEdges: false, wrapEdges: true })
                     setConfig(getLavaLampConfig())
                   }}
-                  className={`flex-1 px-3 py-1.5 rounded text-xs transition-colors ${
+                  className={`flex-1 px-3 py-2 sm:py-1.5 rounded text-xs transition-colors ${
                     config.wrapEdges
                       ? 'bg-purple-500/30 text-purple-400 border border-purple-500/30'
                       : 'bg-white/5 text-white/40 border border-white/10'
@@ -336,7 +349,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                     setLavaLampAudioResponse({ beatReactivity: parseInt(e.target.value) / 10 })
                     setConfig(getLavaLampConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
                 />
               </div>
 
@@ -354,7 +367,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                     setLavaLampAudioResponse({ bassInfluence: parseInt(e.target.value) / 10 })
                     setConfig(getLavaLampConfig())
                   }}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
                 />
               </div>
             </div>
@@ -373,7 +386,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                       setLavaLampColorMode(mode)
                       setConfig(getLavaLampConfig())
                     }}
-                    className={`px-2 py-1.5 rounded text-xs capitalize transition-colors ${
+                    className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
                       config.colorMode === mode
                         ? 'bg-purple-500/30 text-purple-400 border border-purple-500/30'
                         : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
@@ -387,7 +400,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
 
             <div className="space-y-2">
               <label className="text-white/60 text-xs">Gradient</label>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+              <div className="grid grid-cols-2 gap-2 max-h-40 sm:max-h-32 overflow-y-auto">
                 {gradientNames.map((name) => (
                   <button
                     key={name}
@@ -395,7 +408,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                       setLavaLampGradient(builtInGradients[name])
                       setConfig(getLavaLampConfig())
                     }}
-                    className={`px-2 py-1.5 rounded text-xs capitalize transition-colors ${
+                    className={`px-2 py-2 sm:py-1.5 rounded text-xs capitalize transition-colors ${
                       config.gradient.name === builtInGradients[name].name
                         ? 'bg-purple-500/30 text-purple-400 border border-purple-500/30'
                         : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
@@ -421,7 +434,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampColors({ glowIntensity: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
 
@@ -439,20 +452,20 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                   setLavaLampColors({ colorCycleSpeed: parseInt(e.target.value) / 100 })
                   setConfig(getLavaLampConfig())
                 }}
-                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
             </div>
           </>
         )}
       </div>
 
-      <div className="px-4 py-3 border-t border-white/10 bg-white/5">
+      <div className="px-4 py-3 border-t border-white/10 bg-white/5 shrink-0">
         <button
           onClick={() => {
             resetLavaLampConfig()
             setConfig(getLavaLampConfig())
           }}
-          className="w-full px-3 py-1.5 rounded bg-white/5 border border-white/10 text-white/60 text-xs hover:bg-white/10 hover:text-white/80 transition-colors"
+          className="w-full px-3 py-2 sm:py-1.5 rounded bg-white/5 border border-white/10 text-white/60 text-xs hover:bg-white/10 hover:text-white/80 transition-colors"
         >
           Reset to Defaults
         </button>

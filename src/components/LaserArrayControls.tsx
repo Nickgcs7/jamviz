@@ -1,6 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import {
-  setLaserArrayConfig,
   getLaserArrayConfig,
   setLaserArrayLasers,
   setLaserArrayOrigin,
@@ -22,11 +21,6 @@ interface LaserArrayControlsProps {
 export default function LaserArrayControls({ visible, onClose }: LaserArrayControlsProps) {
   const [config, setConfig] = useState<LaserArrayConfig>(getLaserArrayConfig())
   const [activeTab, setActiveTab] = useState<'lasers' | 'animation' | 'color' | 'effects'>('lasers')
-
-  const updateConfig = useCallback((updates: Partial<LaserArrayConfig>) => {
-    setLaserArrayConfig(updates)
-    setConfig(getLaserArrayConfig())
-  }, [])
 
   if (!visible) return null
 

@@ -20,7 +20,7 @@ interface LavaLampControlsProps {
 
 export default function LavaLampControls({ visible, onClose }: LavaLampControlsProps) {
   const [config, setConfig] = useState<LavaLampConfig>(getLavaLampConfig())
-  const [activeTab, setActiveTab] = useState<'blobs' | 'movement' | 'physics' | 'color'>('blobs')
+  const [activeTab, setActiveTab] = useState<'blobs' | 'physics' | 'audio' | 'color'>('blobs')
   const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
@@ -34,7 +34,6 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
 
   const gradientNames = Object.keys(builtInGradients)
 
-  // Mobile: full screen overlay, Desktop: side panel
   const panelClasses = isMobile 
     ? "fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col"
     : "absolute top-20 right-4 w-72 bg-black/80 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden z-50"
@@ -54,7 +53,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
       </div>
 
       <div className="flex border-b border-white/10 shrink-0">
-        {(['blobs', 'movement', 'physics', 'color'] as const).map((tab) => (
+        {(['blobs', 'physics', 'audio', 'color'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -131,12 +130,12 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Merge Threshold</label>
+                <label className="text-white/60 text-xs">Blob Separation</label>
                 <span className="text-white/80 text-xs">{config.mergeThreshold.toFixed(1)}</span>
               </div>
               <input
                 type="range"
-                min="10"
+                min="15"
                 max="50"
                 value={config.mergeThreshold * 10}
                 onChange={(e) => {
@@ -145,100 +144,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
-            </div>
-          </>
-        )}
-
-        {activeTab === 'movement' && (
-          <>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Rise Speed</label>
-                <span className="text-white/80 text-xs">{config.riseSpeed.toFixed(1)}</span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="30"
-                value={config.riseSpeed * 10}
-                onChange={(e) => {
-                  setLavaLampMovement({ riseSpeed: parseInt(e.target.value) / 10 })
-                  setConfig(getLavaLampConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Sink Speed</label>
-                <span className="text-white/80 text-xs">{config.sinkSpeed.toFixed(1)}</span>
-              </div>
-              <input
-                type="range"
-                min="1"
-                max="30"
-                value={config.sinkSpeed * 10}
-                onChange={(e) => {
-                  setLavaLampMovement({ sinkSpeed: parseInt(e.target.value) / 10 })
-                  setConfig(getLavaLampConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Wander Strength</label>
-                <span className="text-white/80 text-xs">{config.wanderStrength.toFixed(1)}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="30"
-                value={config.wanderStrength * 10}
-                onChange={(e) => {
-                  setLavaLampMovement({ wanderStrength: parseInt(e.target.value) / 10 })
-                  setConfig(getLavaLampConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Wander Speed</label>
-                <span className="text-white/80 text-xs">{config.wanderSpeed.toFixed(2)}</span>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="100"
-                value={config.wanderSpeed * 100}
-                onChange={(e) => {
-                  setLavaLampMovement({ wanderSpeed: parseInt(e.target.value) / 100 })
-                  setConfig(getLavaLampConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-white/60 text-xs">Turbulence</label>
-                <span className="text-white/80 text-xs">{config.turbulence.toFixed(2)}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={config.turbulence * 100}
-                onChange={(e) => {
-                  setLavaLampMovement({ turbulence: parseInt(e.target.value) / 100 })
-                  setConfig(getLavaLampConfig())
-                }}
-                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
+              <p className="text-white/30 text-xs">Higher = more distinct blobs</p>
             </div>
           </>
         )}
@@ -248,15 +154,15 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-white/60 text-xs">Gravity</label>
-                <span className="text-white/80 text-xs">{config.gravity.toFixed(2)}</span>
+                <span className="text-white/80 text-xs">{(config.gravity * 1000).toFixed(0)}</span>
               </div>
               <input
                 type="range"
-                min="0"
-                max="50"
-                value={config.gravity * 100}
+                min="1"
+                max="30"
+                value={config.gravity * 1000}
                 onChange={(e) => {
-                  setLavaLampPhysics({ gravity: parseInt(e.target.value) / 100 })
+                  setLavaLampPhysics({ gravity: parseInt(e.target.value) / 1000 })
                   setConfig(getLavaLampConfig())
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
@@ -266,15 +172,15 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-white/60 text-xs">Buoyancy</label>
-                <span className="text-white/80 text-xs">{config.buoyancy.toFixed(2)}</span>
+                <span className="text-white/80 text-xs">{(config.buoyancy * 1000).toFixed(0)}</span>
               </div>
               <input
                 type="range"
-                min="10"
-                max="150"
-                value={config.buoyancy * 100}
+                min="5"
+                max="50"
+                value={config.buoyancy * 1000}
                 onChange={(e) => {
-                  setLavaLampPhysics({ buoyancy: parseInt(e.target.value) / 100 })
+                  setLavaLampPhysics({ buoyancy: parseInt(e.target.value) / 1000 })
                   setConfig(getLavaLampConfig())
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
@@ -284,11 +190,11 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-white/60 text-xs">Viscosity</label>
-                <span className="text-white/80 text-xs">{config.viscosity.toFixed(2)}</span>
+                <span className="text-white/80 text-xs">{(config.viscosity * 100).toFixed(0)}%</span>
               </div>
               <input
                 type="range"
-                min="80"
+                min="90"
                 max="100"
                 value={config.viscosity * 100}
                 onChange={(e) => {
@@ -297,6 +203,65 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                 }}
                 className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
+              <p className="text-white/30 text-xs">Higher = smoother movement</p>
+            </div>
+
+            <div className="pt-3 border-t border-white/5">
+              <p className="text-white/40 text-xs mb-3">Wandering Motion</p>
+              
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/60 text-xs">Wander Amount</label>
+                  <span className="text-white/80 text-xs">{config.wanderStrength.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={config.wanderStrength * 100}
+                  onChange={(e) => {
+                    setLavaLampMovement({ wanderStrength: parseInt(e.target.value) / 100 })
+                    setConfig(getLavaLampConfig())
+                  }}
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                />
+              </div>
+
+              <div className="space-y-2 mt-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/60 text-xs">Wander Speed</label>
+                  <span className="text-white/80 text-xs">{config.wanderSpeed.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="1"
+                  max="30"
+                  value={config.wanderSpeed * 100}
+                  onChange={(e) => {
+                    setLavaLampMovement({ wanderSpeed: parseInt(e.target.value) / 100 })
+                    setConfig(getLavaLampConfig())
+                  }}
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                />
+              </div>
+
+              <div className="space-y-2 mt-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-white/60 text-xs">Turbulence</label>
+                  <span className="text-white/80 text-xs">{config.turbulence.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  value={config.turbulence * 100}
+                  onChange={(e) => {
+                    setLavaLampMovement({ turbulence: parseInt(e.target.value) / 100 })
+                    setConfig(getLavaLampConfig())
+                  }}
+                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                />
+              </div>
             </div>
 
             <div className="pt-3 border-t border-white/5">
@@ -331,45 +296,85 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
                 </button>
               </div>
             </div>
+          </>
+        )}
 
-            <div className="pt-3 border-t border-white/5">
-              <p className="text-white/40 text-xs mb-3">Audio Response</p>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Beat Reactivity</label>
-                  <span className="text-white/80 text-xs">{config.beatReactivity.toFixed(1)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={config.beatReactivity * 10}
-                  onChange={(e) => {
-                    setLavaLampAudioResponse({ beatReactivity: parseInt(e.target.value) / 10 })
-                    setConfig(getLavaLampConfig())
-                  }}
-                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                />
+        {activeTab === 'audio' && (
+          <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Beat Reactivity</label>
+                <span className="text-white/80 text-xs">{config.beatReactivity.toFixed(1)}x</span>
               </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.beatReactivity * 10}
+                onChange={(e) => {
+                  setLavaLampAudioResponse({ beatReactivity: parseInt(e.target.value) / 10 })
+                  setConfig(getLavaLampConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+              <p className="text-white/30 text-xs">Movement on beat drops</p>
+            </div>
 
-              <div className="space-y-2 mt-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-white/60 text-xs">Bass Influence</label>
-                  <span className="text-white/80 text-xs">{config.bassInfluence.toFixed(1)}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={config.bassInfluence * 10}
-                  onChange={(e) => {
-                    setLavaLampAudioResponse({ bassInfluence: parseInt(e.target.value) / 10 })
-                    setConfig(getLavaLampConfig())
-                  }}
-                  className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Bass Influence</label>
+                <span className="text-white/80 text-xs">{config.bassInfluence.toFixed(1)}x</span>
               </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.bassInfluence * 10}
+                onChange={(e) => {
+                  setLavaLampAudioResponse({ bassInfluence: parseInt(e.target.value) / 10 })
+                  setConfig(getLavaLampConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+              <p className="text-white/30 text-xs">Size pulsing with bass</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Mid Influence</label>
+                <span className="text-white/80 text-xs">{config.midInfluence.toFixed(1)}x</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="20"
+                value={config.midInfluence * 10}
+                onChange={(e) => {
+                  setLavaLampAudioResponse({ midInfluence: parseInt(e.target.value) / 10 })
+                  setConfig(getLavaLampConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+              <p className="text-white/30 text-xs">Horizontal wandering</p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-white/60 text-xs">Smoothing</label>
+                <span className="text-white/80 text-xs">{(config.smoothingFactor * 100).toFixed(0)}%</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                value={config.smoothingFactor * 100}
+                onChange={(e) => {
+                  setLavaLampAudioResponse({ smoothingFactor: parseInt(e.target.value) / 100 })
+                  setConfig(getLavaLampConfig())
+                }}
+                className="w-full h-2 sm:h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+              />
+              <p className="text-white/30 text-xs">How fast changes apply</p>
             </div>
           </>
         )}
@@ -427,7 +432,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
               </div>
               <input
                 type="range"
-                min="20"
+                min="50"
                 max="200"
                 value={config.glowIntensity * 100}
                 onChange={(e) => {
@@ -446,7 +451,7 @@ export default function LavaLampControls({ visible, onClose }: LavaLampControlsP
               <input
                 type="range"
                 min="0"
-                max="50"
+                max="20"
                 value={config.colorCycleSpeed * 100}
                 onChange={(e) => {
                   setLavaLampColors({ colorCycleSpeed: parseInt(e.target.value) / 100 })

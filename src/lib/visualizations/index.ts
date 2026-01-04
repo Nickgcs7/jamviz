@@ -1,6 +1,5 @@
 export type { VisualizationMode, SceneObjects } from './types'
 
-import { sauronsEye, setSauronsEyeGradient } from './sauronsEye'
 import { laserArray } from './laserArray'
 import { lavaLamp } from './lavaLamp'
 import { ledMatrix } from './ledMatrix'
@@ -22,6 +21,22 @@ import {
   resetRoadwayConfig,
   type RoadwayConfig
 } from './roadway'
+
+// Import enhanced Sauron's Eye with full config API
+import {
+  sauronsEye,
+  setSauronsEyeConfig,
+  getSauronsEyeConfig,
+  setSauronsEyeGradient,
+  setSauronsEyeColorMode,
+  setSauronsEyeGeometry,
+  setSauronsEyeBeam,
+  setSauronsEyeEmbers,
+  setSauronsEyeAudioResponse,
+  setSauronsEyeAnimation,
+  resetSauronsEyeConfig,
+  type SauronsEyeConfig
+} from './sauronsEye'
 
 // Import enhanced spectrum analyzer with full config API
 import { 
@@ -65,8 +80,18 @@ export {
   resetRoadwayConfig,
   type RoadwayConfig,
   
-  // Sauron's Eye
+  // Sauron's Eye (enhanced)
+  setSauronsEyeConfig,
+  getSauronsEyeConfig,
   setSauronsEyeGradient,
+  setSauronsEyeColorMode,
+  setSauronsEyeGeometry,
+  setSauronsEyeBeam,
+  setSauronsEyeEmbers,
+  setSauronsEyeAudioResponse,
+  setSauronsEyeAnimation,
+  resetSauronsEyeConfig,
+  type SauronsEyeConfig,
   
   // Radial Spectrum
   setRadialMode,

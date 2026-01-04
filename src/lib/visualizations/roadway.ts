@@ -598,7 +598,6 @@ export const roadway: VisualizationMode = {
             // Get perspective for this dash
             const zIndex = Math.max(0, Math.min(config.horizonDistance - 1, Math.floor(dashCenterZ / config.cellSize)))
             const perspScale = getPerspectiveScale(zIndex)
-            const zoneIntensity = getZoneIntensity(zIndex)
             
             // Get height at center of road
             const centerLane = Math.floor(config.laneCount / 2)

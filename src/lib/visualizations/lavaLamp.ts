@@ -14,16 +14,41 @@ export interface LavaLampConfig {
   colorCycleSpeed: number; smoothingFactor: number
 }
 
-const DEFAULT_CONFIG: LavaLampConfig = {
-  blobCount: 6, minSize: 4, maxSize: 10, mergeThreshold: 2.5,
-  riseSpeed: 1.0, sinkSpeed: 0.8, wanderStrength: 1.0, wanderSpeed: 0.5, turbulence: 0.4,
-  gravity: 0.15, buoyancy: 0.6, viscosity: 0.96, bounceEdges: true, wrapEdges: false,
-  colorMode: 'gradient', gradient: builtInGradients.lavaLamp, glowIntensity: 1.0, transparency: 0.85,
-  bassInfluence: 1.0, midInfluence: 0.8, highInfluence: 0.5, beatReactivity: 1.0,
-  colorCycleSpeed: 0.15, smoothingFactor: 0.1
+// Fallback gradient in case builtInGradients isn't ready - using correct ColorStop format
+const FALLBACK_GRADIENT: GradientPreset = {
+  name: 'lavaLamp',
+  bgColor: '#1a0500',
+  colorStops: [
+    { color: '#ff3300', pos: 0 },
+    { color: '#ff8000', pos: 0.25 },
+    { color: '#ffcc33', pos: 0.5 },
+    { color: '#ff6600', pos: 0.75 },
+    { color: '#cc1933', pos: 1 }
+  ]
 }
 
-let config: LavaLampConfig = { ...DEFAULT_CONFIG }
+function getDefaultGradient(): GradientPreset {
+  if (builtInGradients && builtInGradients.lavaLamp && builtInGradients.lavaLamp.colorStops) {
+    return builtInGradients.lavaLamp
+  }
+  if (builtInGradients && builtInGradients.fire && builtInGradients.fire.colorStops) {
+    return builtInGradients.fire
+  }
+  return FALLBACK_GRADIENT
+}
+
+function createDefaultConfig(): LavaLampConfig {
+  return {
+    blobCount: 6, minSize: 4, maxSize: 10, mergeThreshold: 2.5,
+    riseSpeed: 1.0, sinkSpeed: 0.8, wanderStrength: 1.0, wanderSpeed: 0.5, turbulence: 0.4,
+    gravity: 0.15, buoyancy: 0.6, viscosity: 0.96, bounceEdges: true, wrapEdges: false,
+    colorMode: 'gradient', gradient: getDefaultGradient(), glowIntensity: 1.0, transparency: 0.85,
+    bassInfluence: 1.0, midInfluence: 0.8, highInfluence: 0.5, beatReactivity: 1.0,
+    colorCycleSpeed: 0.15, smoothingFactor: 0.1
+  }
+}
+
+let config: LavaLampConfig = createDefaultConfig()
 const MIN_BLOBS = 2, MAX_BLOBS = 12
 
 interface EnhancedBlob extends MetaBlob {
@@ -34,8 +59,18 @@ let blobs: EnhancedBlob[] = []
 let currentBlobCount = 6, lastSpawnTime = 0, lastDespawnTime = 0, gravityDirection = 1
 let quadMesh: THREE.Mesh | null = null, shaderMaterial: THREE.ShaderMaterial | null = null
 
-function getGradient(): GradientPreset {
-  return config.gradient && config.gradient.colorStops ? config.gradient : builtInGradients.lavaLamp
+function ensureValidGradient(): GradientPreset {
+  if (config.gradient && config.gradient.colorStops && Array.isArray(config.gradient.colorStops) && config.gradient.colorStops.length > 0) {
+    return config.gradient
+  }
+  // Try to get from builtInGradients
+  if (builtInGradients && builtInGradients.fire && builtInGradients.fire.colorStops) {
+    config.gradient = builtInGradients.fire
+    return config.gradient
+  }
+  // Use fallback
+  config.gradient = FALLBACK_GRADIENT
+  return FALLBACK_GRADIENT
 }
 
 function initBlobs(count: number): EnhancedBlob[] {
@@ -88,7 +123,7 @@ function getBlobColor(blob: EnhancedBlob, time: number, bands: AudioBands): THRE
       color.setHSL((time * config.colorCycleSpeed + blob.colorPhase) % 1, 0.85, 0.5)
       break
     default: {
-      const gradient = getGradient()
+      const gradient = ensureValidGradient()
       const t = (blob.y + 30) / 60 + time * config.colorCycleSpeed * 0.2 + blob.colorPhase * 0.1
       const [r, g, b] = sampleGradient(gradient, t)
       color.setRGB(r, g, b)
@@ -102,17 +137,13 @@ export const lavaLamp: VisualizationMode = {
   hideParticles: true,
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
-    if (!config.gradient || !config.gradient.colorStops) {
-      config.gradient = builtInGradients.lavaLamp
-    }
+    ensureValidGradient()
     blobs = initBlobs(config.blobCount); currentBlobCount = config.blobCount; gravityDirection = 1; lastSpawnTime = lastDespawnTime = 0
     for (let i = 0; i < count; i++) { positions[i * 3] = 0; positions[i * 3 + 1] = -1000; positions[i * 3 + 2] = 0; colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = 0 }
   },
 
   createSceneObjects(scene: THREE.Scene): SceneObjects {
-    if (!config.gradient || !config.gradient.colorStops) {
-      config.gradient = builtInGradients.lavaLamp
-    }
+    ensureValidGradient()
     
     const geometry = createFullscreenQuad()
     const blobPositions = [], blobSizes = [], blobColors = []
@@ -136,6 +167,10 @@ export const lavaLamp: VisualizationMode = {
       objects: [quadMesh],
       update: (bands: AudioBands, time: number) => {
         if (!shaderMaterial) return
+        
+        // Ensure gradient is valid before any color operations
+        ensureValidGradient()
+        
         const dt = 0.016
 
         if (bands.overallSmooth > 0.65 && time - lastSpawnTime > 2) { spawnBlob(); lastSpawnTime = time }
@@ -233,14 +268,12 @@ export const lavaLamp: VisualizationMode = {
 // PUBLIC API
 export function setLavaLampConfig(c: Partial<LavaLampConfig>) { 
   config = { ...config, ...c }
-  if (!config.gradient || !config.gradient.colorStops) {
-    config.gradient = builtInGradients.lavaLamp
-  }
+  ensureValidGradient()
   if (c.blobCount !== undefined) { blobs = initBlobs(config.blobCount); currentBlobCount = config.blobCount } 
 }
 export function getLavaLampConfig(): LavaLampConfig { return { ...config } }
 export function setLavaLampGradient(g: GradientPreset) { 
-  if (g && g.colorStops) {
+  if (g && g.colorStops && Array.isArray(g.colorStops) && g.colorStops.length > 0) {
     config.gradient = g 
   }
 }
@@ -269,7 +302,6 @@ export function setLavaLampAudioResponse(p: { bassInfluence?: number; midInfluen
   if (p.smoothingFactor !== undefined) config.smoothingFactor = p.smoothingFactor
 }
 export function resetLavaLampConfig() { 
-  config = { ...DEFAULT_CONFIG }
-  config.gradient = builtInGradients.lavaLamp
+  config = createDefaultConfig()
   blobs = initBlobs(config.blobCount); currentBlobCount = config.blobCount 
 }

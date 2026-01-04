@@ -4,10 +4,6 @@ import { hslToRgb, getCyclingHue } from '../colorUtils'
 import { builtInGradients, sampleGradient, type GradientPreset } from '../gradients'
 import * as THREE from 'three'
 
-// ============================================================================
-// CONFIGURATION - Full configuration API
-// ============================================================================
-
 export interface LaserArrayConfig {
   laserCount: number
   laserWidth: number
@@ -16,6 +12,10 @@ export interface LaserArrayConfig {
   originSpread: number
   originY: number
   originZ: number
+  uplightCount: number
+  uplightSpread: number
+  uplightLength: number
+  uplightBeams: number
   sweepSpeed: number
   sweepRange: number
   pulseSpeed: number
@@ -41,8 +41,12 @@ const DEFAULT_CONFIG: LaserArrayConfig = {
   laserLength: 80,
   beamsPerLaser: 8,
   originSpread: 60,
-  originY: -25,
+  originY: 30,
   originZ: -5,
+  uplightCount: 3,
+  uplightSpread: 40,
+  uplightLength: 35,
+  uplightBeams: 5,
   sweepSpeed: 0.6,
   sweepRange: 60,
   pulseSpeed: 2.0,
@@ -67,40 +71,26 @@ let config: LaserArrayConfig = { ...DEFAULT_CONFIG }
 const MAX_FIXTURES = 12
 const MAX_BEAMS_PER_FIXTURE = 12
 const MAX_BEAMS = MAX_FIXTURES * MAX_BEAMS_PER_FIXTURE
+const MAX_UPLIGHTS = 5
+const MAX_UPLIGHT_BEAMS = 8
 const TRAIL_PARTICLES_PER_BEAM = 15
-const MAX_TRAIL_PARTICLES = MAX_BEAMS * TRAIL_PARTICLES_PER_BEAM
+const MAX_TRAIL_PARTICLES = (MAX_BEAMS + MAX_UPLIGHTS * MAX_UPLIGHT_BEAMS) * TRAIL_PARTICLES_PER_BEAM
 
 interface LaserFixture {
-  x: number
-  y: number
-  z: number
-  baseHue: number
-  active: boolean
-  intensity: number
-  targetIntensity: number
+  x: number; y: number; z: number
+  baseHue: number; active: boolean; intensity: number; targetIntensity: number
   beams: LaserBeam[]
+  isUplight: boolean
 }
 
 interface LaserBeam {
-  angle: number
-  pitch: number
-  targetAngle: number
-  targetPitch: number
-  length: number
-  targetLength: number
-  hue: number
-  intensity: number
-  flickerPhase: number
-  frequencyBand: 'bass' | 'mid' | 'high' | 'treble'
+  angle: number; pitch: number; targetAngle: number; targetPitch: number
+  length: number; targetLength: number; hue: number; intensity: number
+  flickerPhase: number; frequencyBand: 'bass' | 'mid' | 'high' | 'treble'
 }
 
 interface TrailParticle {
-  beamIndex: number
-  fixtureIndex: number
-  t: number
-  age: number
-  maxAge: number
-  active: boolean
+  beamIndex: number; fixtureIndex: number; t: number; age: number; maxAge: number; active: boolean
 }
 
 const fixtures: LaserFixture[] = []
@@ -119,8 +109,14 @@ let fogPoints: THREE.Points | null = null
 let currentActiveFixtures = 5
 let sweepPhase = 0
 
+function getGradient(): GradientPreset {
+  return config.gradient && config.gradient.colorStops ? config.gradient : builtInGradients.neon
+}
+
 function initFixtures() {
   fixtures.length = 0
+  
+  // Main fixtures (top, pointing down)
   for (let f = 0; f < MAX_FIXTURES; f++) {
     const fixture: LaserFixture = {
       x: 0, y: config.originY, z: config.originZ,
@@ -128,7 +124,8 @@ function initFixtures() {
       active: f < config.laserCount,
       intensity: f < config.laserCount ? 1 : 0,
       targetIntensity: f < config.laserCount ? 1 : 0,
-      beams: []
+      beams: [],
+      isUplight: false
     }
     for (let b = 0; b < MAX_BEAMS_PER_FIXTURE; b++) {
       const spreadAngle = ((b / (config.beamsPerLaser - 1)) - 0.5) * Math.PI * 0.6
@@ -138,11 +135,36 @@ function initFixtures() {
       else if (b < config.beamsPerLaser * 0.75) band = 'high'
       else band = 'treble'
       fixture.beams.push({
-        angle: spreadAngle, pitch: Math.PI * 0.3 + Math.random() * 0.1,
-        targetAngle: spreadAngle, targetPitch: Math.PI * 0.3,
+        angle: spreadAngle, pitch: Math.PI * 0.65 + Math.random() * 0.1,
+        targetAngle: spreadAngle, targetPitch: Math.PI * 0.65,
         length: config.laserLength, targetLength: config.laserLength,
         hue: fixture.baseHue + (b / config.beamsPerLaser) * 0.15,
         intensity: 0.8, flickerPhase: Math.random() * Math.PI * 2, frequencyBand: band
+      })
+    }
+    fixtures.push(fixture)
+  }
+  
+  // Uplights (bottom, pointing up)
+  for (let u = 0; u < MAX_UPLIGHTS; u++) {
+    const fixture: LaserFixture = {
+      x: 0, y: -28, z: config.originZ + 5,
+      baseHue: (u / MAX_UPLIGHTS + 0.5) % 1,
+      active: u < config.uplightCount,
+      intensity: u < config.uplightCount ? 0.7 : 0,
+      targetIntensity: u < config.uplightCount ? 0.7 : 0,
+      beams: [],
+      isUplight: true
+    }
+    for (let b = 0; b < MAX_UPLIGHT_BEAMS; b++) {
+      const spreadAngle = ((b / Math.max(1, config.uplightBeams - 1)) - 0.5) * Math.PI * 0.4
+      fixture.beams.push({
+        angle: spreadAngle, pitch: Math.PI * 0.25,
+        targetAngle: spreadAngle, targetPitch: Math.PI * 0.25,
+        length: config.uplightLength, targetLength: config.uplightLength,
+        hue: fixture.baseHue + (b / config.uplightBeams) * 0.2,
+        intensity: 0.6, flickerPhase: Math.random() * Math.PI * 2, 
+        frequencyBand: 'bass'
       })
     }
     fixtures.push(fixture)
@@ -153,9 +175,8 @@ function initTrailParticles() {
   trailParticles.length = 0
   for (let i = 0; i < MAX_TRAIL_PARTICLES; i++) {
     trailParticles.push({
-      fixtureIndex: Math.floor(i / (MAX_BEAMS_PER_FIXTURE * TRAIL_PARTICLES_PER_BEAM)),
-      beamIndex: Math.floor((i % (MAX_BEAMS_PER_FIXTURE * TRAIL_PARTICLES_PER_BEAM)) / TRAIL_PARTICLES_PER_BEAM),
-      t: (i % TRAIL_PARTICLES_PER_BEAM) / TRAIL_PARTICLES_PER_BEAM,
+      fixtureIndex: 0, beamIndex: 0,
+      t: Math.random(),
       age: Math.random(), maxAge: 0.4 + Math.random() * 0.4, active: true
     })
   }
@@ -164,7 +185,9 @@ function initTrailParticles() {
 function updateFixturePositions(activeCount: number) {
   const spacing = config.originSpread / Math.max(1, activeCount - 1)
   const startX = -config.originSpread / 2
-  for (let f = 0; f < fixtures.length; f++) {
+  
+  // Update main fixtures
+  for (let f = 0; f < MAX_FIXTURES; f++) {
     if (f < activeCount) {
       fixtures[f].x = activeCount === 1 ? 0 : startX + f * spacing
       fixtures[f].y = config.originY
@@ -174,10 +197,27 @@ function updateFixturePositions(activeCount: number) {
       fixtures[f].targetIntensity = 0
     }
   }
+  
+  // Update uplights
+  const uplightSpacing = config.uplightSpread / Math.max(1, config.uplightCount - 1)
+  const uplightStartX = -config.uplightSpread / 2
+  for (let u = 0; u < MAX_UPLIGHTS; u++) {
+    const idx = MAX_FIXTURES + u
+    if (u < config.uplightCount) {
+      fixtures[idx].x = config.uplightCount === 1 ? 0 : uplightStartX + u * uplightSpacing
+      fixtures[idx].y = -28
+      fixtures[idx].z = config.originZ + 5
+      fixtures[idx].targetIntensity = 0.7
+    } else {
+      fixtures[idx].targetIntensity = 0
+    }
+  }
 }
 
 function getBeamColor(beam: LaserBeam, fixture: LaserFixture, bands: AudioBands, cycleHue: number, progress: number): [number, number, number] {
   let r: number, g: number, b: number
+  const gradient = getGradient()
+  
   switch (config.colorMode) {
     case 'bar-level': {
       let amplitude: number
@@ -192,7 +232,7 @@ function getBeamColor(beam: LaserBeam, fixture: LaserFixture, bands: AudioBands,
     }
     case 'stereo': {
       const balance = bands.stereoBalance
-      let hue = balance < -0.1 ? 0.55 + Math.abs(balance) * 0.1 : balance > 0.1 ? 0.85 + balance * 0.1 : 0.25 + cycleHue * 0.2
+      const hue = balance < -0.1 ? 0.55 + Math.abs(balance) * 0.1 : balance > 0.1 ? 0.85 + balance * 0.1 : 0.25 + cycleHue * 0.2
       ;[r, g, b] = hslToRgb(hue, 0.85, (0.5 + bands.overallSmooth * 0.2) * (1 - progress * 0.3))
       break
     }
@@ -201,7 +241,7 @@ function getBeamColor(beam: LaserBeam, fixture: LaserFixture, bands: AudioBands,
       break
     }
     default: {
-      ;[r, g, b] = sampleGradient(config.gradient, progress * 0.5 + cycleHue * 0.3 + fixture.baseHue * 0.2)
+      ;[r, g, b] = sampleGradient(gradient, progress * 0.5 + cycleHue * 0.3 + fixture.baseHue * 0.2)
       const fade = 1 - progress * 0.3
       r *= fade * beam.intensity * config.glowIntensity
       g *= fade * beam.intensity * config.glowIntensity
@@ -218,23 +258,32 @@ function getBeamColor(beam: LaserBeam, fixture: LaserFixture, bands: AudioBands,
 export const laserArray: VisualizationMode = {
   id: 'laser_array',
   name: 'Laser Array',
-  description: 'Concert lasers with configurable beams and effects',
+  description: 'Concert lasers with top-down beams and stage uplights',
   hideParticles: false,
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
+    if (!config.gradient || !config.gradient.colorStops) {
+      config.gradient = builtInGradients.neon
+    }
     initFixtures(); initTrailParticles(); updateFixturePositions(config.laserCount)
     currentActiveFixtures = config.laserCount; sweepPhase = 0
+    const gradient = getGradient()
     for (let i = 0; i < count; i++) {
       positions[i * 3] = 0
       positions[i * 3 + 1] = i < MAX_TRAIL_PARTICLES && config.trailParticles ? config.originY : -200
       positions[i * 3 + 2] = i < MAX_TRAIL_PARTICLES && config.trailParticles ? config.originZ : 0
-      const [cr, cg, cb] = sampleGradient(config.gradient, Math.random())
+      const [cr, cg, cb] = sampleGradient(gradient, Math.random())
       colors[i * 3] = cr; colors[i * 3 + 1] = cg; colors[i * 3 + 2] = cb
     }
   },
 
   createSceneObjects(scene: THREE.Scene): SceneObjects {
-    const vertexCount = MAX_BEAMS * 2 * 2
+    if (!config.gradient || !config.gradient.colorStops) {
+      config.gradient = builtInGradients.neon
+    }
+    
+    const totalBeams = MAX_BEAMS + MAX_UPLIGHTS * MAX_UPLIGHT_BEAMS
+    const vertexCount = totalBeams * 2 * 2
     lineGeometry = new THREE.BufferGeometry()
     lineGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertexCount * 3), 3))
     lineGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(vertexCount * 3), 3))
@@ -242,9 +291,10 @@ export const laserArray: VisualizationMode = {
     lineSegments = new THREE.LineSegments(lineGeometry, lineMaterial)
     scene.add(lineSegments)
 
+    const totalFixtures = MAX_FIXTURES + MAX_UPLIGHTS
     glowGeometry = new THREE.BufferGeometry()
-    glowGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_FIXTURES * 3), 3))
-    glowGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_FIXTURES * 3), 3))
+    glowGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(totalFixtures * 3), 3))
+    glowGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(totalFixtures * 3), 3))
     glowMaterial = new THREE.PointsMaterial({ size: 5, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, sizeAttenuation: true })
     glowPoints = new THREE.Points(glowGeometry, glowMaterial)
     scene.add(glowPoints)
@@ -266,6 +316,7 @@ export const laserArray: VisualizationMode = {
       objects: [lineSegments, glowPoints, fogPoints],
       update: (bands: AudioBands, time: number) => {
         if (!lineGeometry || !glowGeometry) return
+        const gradient = getGradient()
         const cycleHue = getCyclingHue(time)
         const posAttr = lineGeometry.getAttribute('position') as THREE.BufferAttribute
         const colAttr = lineGeometry.getAttribute('color') as THREE.BufferAttribute
@@ -282,13 +333,18 @@ export const laserArray: VisualizationMode = {
         for (let f = 0; f < fixtures.length; f++) {
           const fix = fixtures[f]
           fix.intensity += (fix.targetIntensity - fix.intensity) * config.smoothingFactor
+          
           glowPos[f * 3] = fix.x; glowPos[f * 3 + 1] = fix.y; glowPos[f * 3 + 2] = fix.z
           const gi = fix.intensity * (0.5 + bands.overallSmooth * 0.5) * config.glowIntensity
-          const [gr, gg, gb] = sampleGradient(config.gradient, cycleHue + fix.baseHue * 0.3)
+          const [gr, gg, gb] = sampleGradient(gradient, cycleHue + fix.baseHue * 0.3)
           glowCol[f * 3] = gr * gi; glowCol[f * 3 + 1] = gg * gi; glowCol[f * 3 + 2] = gb * gi
+          
           if (fix.intensity < 0.1) continue
-          fix.baseHue = cycleHue + f * 0.08
-          const activeBeams = Math.min(fix.beams.length, config.beamsPerLaser)
+          fix.baseHue = cycleHue + (f % MAX_FIXTURES) * 0.08
+          
+          const activeBeams = fix.isUplight ? Math.min(fix.beams.length, config.uplightBeams) : Math.min(fix.beams.length, config.beamsPerLaser)
+          const beamLength = fix.isUplight ? config.uplightLength : config.laserLength
+          
           for (let b = 0; b < activeBeams; b++) {
             const beam = fix.beams[b]
             let bandSmooth: number
@@ -298,26 +354,40 @@ export const laserArray: VisualizationMode = {
               case 'high': bandSmooth = bands.highSmooth * config.highInfluence; break
               case 'treble': bandSmooth = bands.trebleSmooth * config.highInfluence; break
             }
-            const baseSweep = ((b / (activeBeams - 1)) - 0.5) * Math.PI * (config.sweepRange / 90)
-            beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.6 + f * 0.7 + b * 0.25) * (0.25 + bandSmooth * 0.35)
-            if (config.syncToBeats && bands.isBeat) beam.targetAngle += bands.beatIntensity * Math.sin((f * MAX_BEAMS_PER_FIXTURE + b) * 1.5) * 0.25 * config.beatReactivity
-            beam.targetPitch = Math.PI * 0.35 + Math.sin(time * 0.5 + f * 0.4) * 0.15 + bandSmooth * 0.15
-            beam.targetLength = config.laserLength * (0.7 + bandSmooth * 0.4 + bands.beatIntensity * 0.2 * config.beatReactivity)
+            
+            if (fix.isUplight) {
+              // Uplights: narrower sweep, pointing up
+              const baseSweep = ((b / Math.max(1, activeBeams - 1)) - 0.5) * Math.PI * 0.35
+              beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.8 + f * 0.5 + b * 0.3) * 0.2 * (1 + bandSmooth)
+              beam.targetPitch = Math.PI * 0.3 + bandSmooth * 0.1
+              beam.targetLength = beamLength * (0.6 + bandSmooth * 0.5 + bands.beatIntensity * 0.3 * config.beatReactivity)
+            } else {
+              // Main lasers: wider sweep, pointing down
+              const baseSweep = ((b / (activeBeams - 1)) - 0.5) * Math.PI * (config.sweepRange / 90)
+              beam.targetAngle = baseSweep + Math.sin(sweepPhase * 0.6 + f * 0.7 + b * 0.25) * (0.25 + bandSmooth * 0.35)
+              if (config.syncToBeats && bands.isBeat) beam.targetAngle += bands.beatIntensity * Math.sin((f * MAX_BEAMS_PER_FIXTURE + b) * 1.5) * 0.25 * config.beatReactivity
+              beam.targetPitch = Math.PI * 0.65 + Math.sin(time * 0.5 + f * 0.4) * 0.15 + bandSmooth * 0.15
+              beam.targetLength = beamLength * (0.7 + bandSmooth * 0.4 + bands.beatIntensity * 0.2 * config.beatReactivity)
+            }
+            
             beam.angle += (beam.targetAngle - beam.angle) * config.smoothingFactor
             beam.pitch += (beam.targetPitch - beam.pitch) * config.smoothingFactor * 0.8
             beam.length += (beam.targetLength - beam.length) * config.smoothingFactor * 1.2
             beam.intensity = (0.6 + bandSmooth * 0.35 + bands.beatIntensity * 0.15 * config.beatReactivity) * (1 + Math.sin(time * 20 + beam.flickerPhase) * 0.05 * bands.highSmooth * config.highInfluence) * fix.intensity
+            
             const r = beam.length
             const endX = fix.x + Math.sin(beam.angle) * Math.sin(beam.pitch) * r
-            const endY = fix.y + Math.cos(beam.pitch) * r
+            const endY = fix.y + (fix.isUplight ? Math.cos(beam.pitch) * r : -Math.cos(beam.pitch) * r)
             const endZ = fix.z + Math.cos(beam.angle) * Math.sin(beam.pitch) * r * 0.3
+            
             pos[vi * 3] = fix.x; pos[vi * 3 + 1] = fix.y; pos[vi * 3 + 2] = fix.z
             const [sr, sg, sb] = getBeamColor(beam, fix, bands, cycleHue, 0)
             col[vi * 3] = sr; col[vi * 3 + 1] = sg; col[vi * 3 + 2] = sb; vi++
             pos[vi * 3] = endX; pos[vi * 3 + 1] = endY; pos[vi * 3 + 2] = endZ
             const [er, eg, eb] = getBeamColor(beam, fix, bands, cycleHue, 1)
             col[vi * 3] = er; col[vi * 3 + 1] = eg; col[vi * 3 + 2] = eb; vi++
-            if (config.mirrorMode) {
+            
+            if (config.mirrorMode && !fix.isUplight) {
               const mx = fix.x - Math.sin(beam.angle) * Math.sin(beam.pitch) * r
               pos[vi * 3] = fix.x; pos[vi * 3 + 1] = fix.y; pos[vi * 3 + 2] = fix.z
               col[vi * 3] = sr; col[vi * 3 + 1] = sg; col[vi * 3 + 2] = sb; vi++
@@ -327,6 +397,7 @@ export const laserArray: VisualizationMode = {
           }
         }
         while (vi < pos.length / 3) { pos[vi * 3 + 1] = -200; vi++ }
+        
         if (fogGeometry && fogMaterial) {
           fogMaterial.opacity = config.fogEnabled ? config.fogDensity * 0.3 * (0.5 + bands.overallSmooth * 0.5) : 0
           const fp = (fogGeometry.getAttribute('position') as THREE.BufferAttribute).array as Float32Array
@@ -335,7 +406,7 @@ export const laserArray: VisualizationMode = {
             fp[i * 3] += Math.sin(time * 0.2 + i * 0.1) * 0.02; fp[i * 3 + 1] += Math.cos(time * 0.15 + i * 0.15) * 0.015
             if (fp[i * 3] > 50) fp[i * 3] = -50; if (fp[i * 3] < -50) fp[i * 3] = 50
             if (fp[i * 3 + 1] > 30) fp[i * 3 + 1] = -30; if (fp[i * 3 + 1] < -30) fp[i * 3 + 1] = 30
-            const [fr, fg, fb] = sampleGradient(config.gradient, cycleHue + i * 0.001)
+            const [fr, fg, fb] = sampleGradient(gradient, cycleHue + i * 0.001)
             fc[i * 3] = fr * 0.3; fc[i * 3 + 1] = fg * 0.3; fc[i * 3 + 2] = fb * 0.4
           }
           ;(fogGeometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true
@@ -354,11 +425,13 @@ export const laserArray: VisualizationMode = {
 
   animate(positions: Float32Array, _orig: Float32Array, sizes: Float32Array, colors: Float32Array, count: number, bands: AudioBands, time: number) {
     if (!config.trailParticles) { for (let i = 0; i < count; i++) { positions[i * 3 + 1] = -200; sizes[i] = 0 } return }
+    const gradient = getGradient()
     const dt = 0.016, cycleHue = getCyclingHue(time)
     let pi = 0
     for (let f = 0; f < fixtures.length; f++) {
       const fix = fixtures[f]
-      for (let b = 0; b < config.beamsPerLaser && b < fix.beams.length; b++) {
+      const activeBeams = fix.isUplight ? config.uplightBeams : config.beamsPerLaser
+      for (let b = 0; b < activeBeams && b < fix.beams.length; b++) {
         const beam = fix.beams[b], pCount = Math.floor(TRAIL_PARTICLES_PER_BEAM * config.trailDensity)
         for (let p = 0; p < pCount; p++) {
           if (pi >= count) break
@@ -370,14 +443,14 @@ export const laserArray: VisualizationMode = {
           if (tp.t > 1) tp.t = 0
           const r = tp.t * beam.length, scatter = (1 - tp.t) * 1.5 * (Math.sin(pi * 3.7 + time * 4) * 0.5 + 0.5)
           const bx = fix.x + Math.sin(beam.angle) * Math.sin(beam.pitch) * r
-          const by = fix.y + Math.cos(beam.pitch) * r
+          const by = fix.y + (fix.isUplight ? Math.cos(beam.pitch) * r : -Math.cos(beam.pitch) * r)
           const bz = fix.z + Math.cos(beam.angle) * Math.sin(beam.pitch) * r * 0.3
           positions[pi * 3] = bx + Math.sin(pi * 2.3) * scatter
           positions[pi * 3 + 1] = by + Math.cos(pi * 1.9) * scatter
           positions[pi * 3 + 2] = bz + Math.sin(pi * 1.7 + time) * scatter
           const lf = 1 - tp.age, bf = 1 - tp.t * 0.6
           sizes[pi] = (1.8 + bands.overallSmooth * 2.5 + bands.beatIntensity * 3 * config.beatReactivity) * lf * bf * fix.intensity
-          const [pr, pg, pb] = sampleGradient(config.gradient, beam.hue + cycleHue * 0.3)
+          const [pr, pg, pb] = sampleGradient(gradient, beam.hue + cycleHue * 0.3)
           colors[pi * 3] = pr * lf * beam.intensity * config.glowIntensity
           colors[pi * 3 + 1] = pg * lf * beam.intensity * config.glowIntensity
           colors[pi * 3 + 2] = pb * lf * beam.intensity * config.glowIntensity
@@ -390,9 +463,13 @@ export const laserArray: VisualizationMode = {
 }
 
 // PUBLIC API
-export function setLaserArrayConfig(c: Partial<LaserArrayConfig>) { config = { ...config, ...c }; initFixtures(); updateFixturePositions(config.laserCount) }
+export function setLaserArrayConfig(c: Partial<LaserArrayConfig>) { 
+  config = { ...config, ...c }
+  if (!config.gradient || !config.gradient.colorStops) config.gradient = builtInGradients.neon
+  initFixtures(); updateFixturePositions(config.laserCount) 
+}
 export function getLaserArrayConfig(): LaserArrayConfig { return { ...config } }
-export function setLaserArrayGradient(g: GradientPreset) { config.gradient = g }
+export function setLaserArrayGradient(g: GradientPreset) { if (g && g.colorStops) config.gradient = g }
 export function setLaserArrayColorMode(m: LaserArrayConfig['colorMode']) { config.colorMode = m }
 export function setLaserArrayLasers(p: { laserCount?: number; laserWidth?: number; laserLength?: number; beamsPerLaser?: number }) {
   if (p.laserCount !== undefined) config.laserCount = p.laserCount
@@ -428,4 +505,8 @@ export function setLaserArrayAudioResponse(p: { bassInfluence?: number; midInflu
   if (p.beatReactivity !== undefined) config.beatReactivity = p.beatReactivity
   if (p.smoothingFactor !== undefined) config.smoothingFactor = p.smoothingFactor
 }
-export function resetLaserArrayConfig() { config = { ...DEFAULT_CONFIG }; initFixtures(); updateFixturePositions(config.laserCount) }
+export function resetLaserArrayConfig() { 
+  config = { ...DEFAULT_CONFIG }
+  config.gradient = builtInGradients.neon
+  initFixtures(); updateFixturePositions(config.laserCount) 
+}

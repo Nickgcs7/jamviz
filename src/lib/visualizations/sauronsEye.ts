@@ -236,21 +236,23 @@ function createBeamShaderMaterial(): THREE.ShaderMaterial {
 
 // Create cone geometry that starts from a point (the eye center)
 function createBeamGeometry(): THREE.BufferGeometry {
-  // Use ConeGeometry with apex at the tip, opening toward the distance
-  // Parameters: radiusTop, radiusBottom, height, radialSegments, heightSegments, openEnded
+  // ConeGeometry(radius, height, radialSegments, heightSegments, openEnded)
+  // Creates a cone with apex at top (+Y), base at bottom (-Y)
   const geometry = new THREE.ConeGeometry(
-    0,                        // radiusTop - point at the eye
-    config.beamWidth,         // radiusBottom - spreads out
+    config.beamWidth,         // radius at base
     config.beamLength,        // height
     32,                       // radialSegments - smooth circle
-    8,                        // heightSegments - for better lighting
-    true                      // openEnded - no cap
+    1,                        // heightSegments
+    true                      // openEnded - no cap at base
   )
   
-  // Rotate so the cone points along -Z axis (into the scene)
-  geometry.rotateX(Math.PI / 2)
+  // Default cone: apex at +Y, base at -Y, centered at origin
+  // We want: apex at origin (eye center), opening toward -Z (into the scene)
+  // Rotate -90 degrees around X axis to point along Z
+  geometry.rotateX(-Math.PI / 2)
   
-  // Translate so the apex (tip) is at origin (eye center)
+  // Now apex is at +Z, base at -Z, but centered at origin
+  // Translate so the apex (tip) is at origin
   geometry.translate(0, 0, -config.beamLength / 2)
   
   return geometry

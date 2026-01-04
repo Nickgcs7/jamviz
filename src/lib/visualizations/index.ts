@@ -8,8 +8,23 @@ import { ledMatrix } from './ledMatrix'
 import { warpField } from './warpField'
 import { yuleLog } from './yuleLog'
 import { radialSpectrum, setRadialMode, getRadialMode, setRadialGradient } from './radialSpectrum'
-import { spectrumAnalyzer, setSpectrumGradient, setSpectrumSmoothing } from './spectrumAnalyzer'
 import { roadway, setRoadwayGradient } from './roadway'
+
+// Import new enhanced spectrum analyzer with full config API
+import { 
+  spectrumAnalyzer,
+  setSpectrumConfig,
+  getSpectrumConfig,
+  setSpectrumGradient, 
+  setSpectrumSmoothing,
+  setSpectrumColorMode,
+  setSpectrumSpin,
+  setLedParams,
+  setReflexParams,
+  setPeakParams,
+  setOverlayParams,
+  type SpectrumConfig
+} from './spectrumAnalyzer'
 
 export const visualizations = [
   waveField,
@@ -42,9 +57,18 @@ export {
   getRadialMode,
   setRadialGradient,
   
-  // Spectrum Analyzer
+  // Spectrum Analyzer (enhanced)
+  setSpectrumConfig,
+  getSpectrumConfig,
   setSpectrumGradient,
-  setSpectrumSmoothing
+  setSpectrumSmoothing,
+  setSpectrumColorMode,
+  setSpectrumSpin,
+  setLedParams,
+  setReflexParams,
+  setPeakParams,
+  setOverlayParams,
+  type SpectrumConfig
 }
 
 // Re-export gradient system from parent

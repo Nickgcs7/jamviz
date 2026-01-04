@@ -12,6 +12,7 @@ import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode, type SceneObjects } from '@/lib/visualizations'
 import { postProcessingPresets, getPresetNames, getCurrentPreset, setPreset, getAudioReactiveSettings } from '@/lib/postProcessingPresets'
 import SpectrumControls from './SpectrumControls'
+import RoadwayControls from './RoadwayControls'
 
 const PARTICLE_COUNT = 10000
 const POSITION_LERP_FACTOR = 0.12
@@ -61,6 +62,7 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const [showUI, setShowUI] = useState(true)
   const [showPresets, setShowPresets] = useState(false)
   const [showSpectrumControls, setShowSpectrumControls] = useState(false)
+  const [showRoadwayControls, setShowRoadwayControls] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ledText, setLedText] = useState('JAMVIZ')
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
@@ -275,8 +277,9 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     setCurrentMode(mode)
     updateParticleLayout(mode)
     if (mode.setText) mode.setText(ledText)
-    // Close spectrum controls when switching away from spectrum analyzer
+    // Close settings panels when switching away from relevant modes
     if (mode.id !== 'spectrum_analyzer') setShowSpectrumControls(false)
+    if (mode.id !== 'roadway') setShowRoadwayControls(false)
   }, [updateParticleLayout, ledText])
 
   const handlePresetChange = useCallback((presetId: string) => {
@@ -309,6 +312,19 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const stopAudio = () => { analyzerRef.current?.disconnect(); analyzerRef.current = null; setIsListening(false) }
   const presetNames = getPresetNames()
 
+  // Check if current mode has a settings panel
+  const hasSettingsPanel = currentMode.id === 'spectrum_analyzer' || currentMode.id === 'roadway'
+  const isSettingsPanelOpen = (currentMode.id === 'spectrum_analyzer' && showSpectrumControls) ||
+                              (currentMode.id === 'roadway' && showRoadwayControls)
+
+  const handleSettingsClick = () => {
+    if (currentMode.id === 'spectrum_analyzer') {
+      setShowSpectrumControls(!showSpectrumControls)
+    } else if (currentMode.id === 'roadway') {
+      setShowRoadwayControls(!showRoadwayControls)
+    }
+  }
+
   return (
     <div className="w-full h-screen bg-[#010103] relative overflow-hidden">
       <div ref={containerRef} className="absolute inset-0" />
@@ -319,12 +335,12 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
             Exit
           </button>
           <div className="flex items-center gap-3">
-            {/* Spectrum Analyzer Settings Button */}
-            {currentMode.id === 'spectrum_analyzer' && (
+            {/* Settings Button (shown for modes with settings panels) */}
+            {hasSettingsPanel && (
               <button
-                onClick={() => setShowSpectrumControls(!showSpectrumControls)}
+                onClick={handleSettingsClick}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-all ${
-                  showSpectrumControls 
+                  isSettingsPanelOpen 
                     ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
                     : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/60 hover:text-white'
                 }`}
@@ -391,6 +407,12 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       <SpectrumControls
         visible={showSpectrumControls && currentMode.id === 'spectrum_analyzer'}
         onClose={() => setShowSpectrumControls(false)}
+      />
+      
+      {/* Roadway Controls Panel */}
+      <RoadwayControls
+        visible={showRoadwayControls && currentMode.id === 'roadway'}
+        onClose={() => setShowRoadwayControls(false)}
       />
     </div>
   )

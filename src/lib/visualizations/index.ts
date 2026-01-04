@@ -1,6 +1,5 @@
 export type { VisualizationMode, SceneObjects } from './types'
 
-import { waveField, setTerrainMode, getTerrainMode, setTerrainGradient } from './waveField'
 import { sauronsEye, setSauronsEyeGradient } from './sauronsEye'
 import { laserArray } from './laserArray'
 import { lavaLamp } from './lavaLamp'
@@ -8,9 +7,23 @@ import { ledMatrix } from './ledMatrix'
 import { warpField } from './warpField'
 import { yuleLog } from './yuleLog'
 import { radialSpectrum, setRadialMode, getRadialMode, setRadialGradient } from './radialSpectrum'
-import { roadway, setRoadwayGradient } from './roadway'
 
-// Import new enhanced spectrum analyzer with full config API
+// Import roadway with full config API
+import { 
+  roadway,
+  setRoadwayConfig,
+  getRoadwayConfig,
+  setRoadwayGradient,
+  setRoadwayColorMode,
+  setRoadwayLaneParams,
+  setRoadwayLineParams,
+  setRoadwayEffects,
+  setRoadwayAudioResponse,
+  resetRoadwayConfig,
+  type RoadwayConfig
+} from './roadway'
+
+// Import enhanced spectrum analyzer with full config API
 import { 
   spectrumAnalyzer,
   setSpectrumConfig,
@@ -27,7 +40,6 @@ import {
 } from './spectrumAnalyzer'
 
 export const visualizations = [
-  waveField,
   roadway,
   sauronsEye,
   laserArray,
@@ -41,13 +53,17 @@ export const visualizations = [
 
 // Re-export visualization control functions
 export {
-  // Wave Field / Terrain
-  setTerrainMode,
-  getTerrainMode,
-  setTerrainGradient,
-  
-  // Roadway
+  // Roadway (enhanced)
+  setRoadwayConfig,
+  getRoadwayConfig,
   setRoadwayGradient,
+  setRoadwayColorMode,
+  setRoadwayLaneParams,
+  setRoadwayLineParams,
+  setRoadwayEffects,
+  setRoadwayAudioResponse,
+  resetRoadwayConfig,
+  type RoadwayConfig,
   
   // Sauron's Eye
   setSauronsEyeGradient,

@@ -14,6 +14,8 @@ import { postProcessingPresets, getPresetNames, getCurrentPreset, setPreset, get
 import SpectrumControls from './SpectrumControls'
 import RoadwayControls from './RoadwayControls'
 import SauronsEyeControls from './SauronsEyeControls'
+import LaserArrayControls from './LaserArrayControls'
+import LavaLampControls from './LavaLampControls'
 
 const PARTICLE_COUNT = 10000
 const POSITION_LERP_FACTOR = 0.12
@@ -65,6 +67,8 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const [showSpectrumControls, setShowSpectrumControls] = useState(false)
   const [showRoadwayControls, setShowRoadwayControls] = useState(false)
   const [showSauronsEyeControls, setShowSauronsEyeControls] = useState(false)
+  const [showLaserArrayControls, setShowLaserArrayControls] = useState(false)
+  const [showLavaLampControls, setShowLavaLampControls] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ledText, setLedText] = useState('JAMVIZ')
   const analyzerRef = useRef<AudioAnalyzer | null>(null)
@@ -280,10 +284,12 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     setCurrentMode(mode)
     updateParticleLayout(mode)
     if (mode.setText) mode.setText(ledText)
-    // Close settings panels when switching away from relevant modes
-    if (mode.id !== 'spectrum_analyzer') setShowSpectrumControls(false)
-    if (mode.id !== 'roadway') setShowRoadwayControls(false)
-    if (mode.id !== 'saurons_eye') setShowSauronsEyeControls(false)
+    // Close all settings panels when switching modes
+    setShowSpectrumControls(false)
+    setShowRoadwayControls(false)
+    setShowSauronsEyeControls(false)
+    setShowLaserArrayControls(false)
+    setShowLavaLampControls(false)
   }, [updateParticleLayout, ledText])
 
   const handlePresetChange = useCallback((presetId: string) => {
@@ -317,19 +323,20 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const presetNames = getPresetNames()
 
   // Check if current mode has a settings panel
-  const hasSettingsPanel = currentMode.id === 'spectrum_analyzer' || currentMode.id === 'roadway' || currentMode.id === 'saurons_eye'
+  const hasSettingsPanel = currentMode.id === 'spectrum_analyzer' || currentMode.id === 'roadway' || 
+                          currentMode.id === 'saurons_eye' || currentMode.id === 'laser_array' || currentMode.id === 'lava_lamp'
   const isSettingsPanelOpen = (currentMode.id === 'spectrum_analyzer' && showSpectrumControls) ||
                               (currentMode.id === 'roadway' && showRoadwayControls) ||
-                              (currentMode.id === 'saurons_eye' && showSauronsEyeControls)
+                              (currentMode.id === 'saurons_eye' && showSauronsEyeControls) ||
+                              (currentMode.id === 'laser_array' && showLaserArrayControls) ||
+                              (currentMode.id === 'lava_lamp' && showLavaLampControls)
 
   const handleSettingsClick = () => {
-    if (currentMode.id === 'spectrum_analyzer') {
-      setShowSpectrumControls(!showSpectrumControls)
-    } else if (currentMode.id === 'roadway') {
-      setShowRoadwayControls(!showRoadwayControls)
-    } else if (currentMode.id === 'saurons_eye') {
-      setShowSauronsEyeControls(!showSauronsEyeControls)
-    }
+    if (currentMode.id === 'spectrum_analyzer') setShowSpectrumControls(!showSpectrumControls)
+    else if (currentMode.id === 'roadway') setShowRoadwayControls(!showRoadwayControls)
+    else if (currentMode.id === 'saurons_eye') setShowSauronsEyeControls(!showSauronsEyeControls)
+    else if (currentMode.id === 'laser_array') setShowLaserArrayControls(!showLaserArrayControls)
+    else if (currentMode.id === 'lava_lamp') setShowLavaLampControls(!showLavaLampControls)
   }
 
   return (
@@ -342,16 +349,13 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
             Exit
           </button>
           <div className="flex items-center gap-3">
-            {/* Settings Button (shown for modes with settings panels) */}
             {hasSettingsPanel && (
-              <button
-                onClick={handleSettingsClick}
+              <button onClick={handleSettingsClick}
                 className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm transition-all ${
                   isSettingsPanelOpen 
                     ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
                     : 'bg-white/5 hover:bg-white/10 border-white/10 text-white/60 hover:text-white'
-                }`}
-              >
+                }`}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
                   <circle cx="12" cy="12" r="3" />
@@ -410,23 +414,12 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         )}
       </div>
       
-      {/* Spectrum Controls Panel */}
-      <SpectrumControls
-        visible={showSpectrumControls && currentMode.id === 'spectrum_analyzer'}
-        onClose={() => setShowSpectrumControls(false)}
-      />
-      
-      {/* Roadway Controls Panel */}
-      <RoadwayControls
-        visible={showRoadwayControls && currentMode.id === 'roadway'}
-        onClose={() => setShowRoadwayControls(false)}
-      />
-      
-      {/* Sauron's Eye Controls Panel */}
-      <SauronsEyeControls
-        visible={showSauronsEyeControls && currentMode.id === 'saurons_eye'}
-        onClose={() => setShowSauronsEyeControls(false)}
-      />
+      {/* Settings Panels */}
+      <SpectrumControls visible={showSpectrumControls && currentMode.id === 'spectrum_analyzer'} onClose={() => setShowSpectrumControls(false)} />
+      <RoadwayControls visible={showRoadwayControls && currentMode.id === 'roadway'} onClose={() => setShowRoadwayControls(false)} />
+      <SauronsEyeControls visible={showSauronsEyeControls && currentMode.id === 'saurons_eye'} onClose={() => setShowSauronsEyeControls(false)} />
+      <LaserArrayControls visible={showLaserArrayControls && currentMode.id === 'laser_array'} onClose={() => setShowLaserArrayControls(false)} />
+      <LavaLampControls visible={showLavaLampControls && currentMode.id === 'lava_lamp'} onClose={() => setShowLavaLampControls(false)} />
     </div>
   )
 }

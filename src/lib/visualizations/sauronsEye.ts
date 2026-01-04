@@ -5,32 +5,30 @@ import { builtInGradients, sampleGradient, type GradientPreset } from '../gradie
 import * as THREE from 'three'
 
 // ============================================================================
-// CONFIGURATION - Full configuration API (mirrors Roadway/SpectrumAnalyzer)
+// CONFIGURATION - Simplified Sauron's Eye
 // ============================================================================
 
 export interface SauronsEyeConfig {
   // Eye geometry
   eyeSize: number
-  irisRings: number
   pupilWidth: number
   pupilHeight: number
-  ringSegments: number
 
-  // Beam configuration
+  // Beam configuration (thick glowing laser)
   beamEnabled: boolean
   beamLength: number
-  beamWidth: number
+  beamWidth: number  // Thickness of the beam
   beamSweepRange: number
   beamSweepSpeed: number
   beamIntensity: number
-  beamParticleCount: number
-  beamOriginOffset: number  // How far from center the beam starts
 
-  // Ember/ambient particles
-  embersEnabled: boolean
-  emberCount: number
-  emberOrbitSpeed: number
-  emberSpread: number
+  // Wavy arm tentacles
+  armsEnabled: boolean
+  armCount: number
+  armLength: number
+  armWaveFrequency: number
+  armWaveAmplitude: number
+  armSpeed: number
 
   // Color configuration
   colorMode: 'gradient' | 'pulse' | 'rainbow' | 'fire'
@@ -52,24 +50,22 @@ export interface SauronsEyeConfig {
 
 const DEFAULT_CONFIG: SauronsEyeConfig = {
   eyeSize: 12,
-  irisRings: 6,
   pupilWidth: 2.5,
   pupilHeight: 18,
-  ringSegments: 64,
 
   beamEnabled: true,
-  beamLength: 60,
-  beamWidth: 25,
+  beamLength: 50,
+  beamWidth: 3,  // Thicker beam
   beamSweepRange: Math.PI * 0.35,
   beamSweepSpeed: 0.4,
-  beamIntensity: 1.0,
-  beamParticleCount: 1200,
-  beamOriginOffset: 0,  // Start exactly at eye center
+  beamIntensity: 1.2,
 
-  embersEnabled: true,
-  emberCount: 250,
-  emberOrbitSpeed: 0.12,
-  emberSpread: 25,
+  armsEnabled: true,
+  armCount: 8,
+  armLength: 35,
+  armWaveFrequency: 3,
+  armWaveAmplitude: 8,
+  armSpeed: 1.5,
 
   colorMode: 'gradient',
   gradient: builtInGradients.fire,
@@ -89,69 +85,32 @@ const DEFAULT_CONFIG: SauronsEyeConfig = {
 let config: SauronsEyeConfig = { ...DEFAULT_CONFIG }
 
 // ============================================================================
-// PARTICLE COUNTS (fixed for array sizing)
+// PARTICLE COUNTS
 // ============================================================================
 
-const CORE_PARTICLES = 800
-const PUPIL_PARTICLES = 200
-const MAX_BEAM_PARTICLES = 1500
-const MAX_AMBIENT_PARTICLES = 400
-const TOTAL_MANAGED = CORE_PARTICLES + PUPIL_PARTICLES + MAX_BEAM_PARTICLES + MAX_AMBIENT_PARTICLES
+const CORE_PARTICLES = 600      // Eye iris/core
+const PUPIL_PARTICLES = 150     // Dark pupil slit
+const BEAM_PARTICLES = 400      // Thick laser beam
+const ARM_PARTICLES = 2000      // Wavy tentacle arms
+const TOTAL_MANAGED = CORE_PARTICLES + PUPIL_PARTICLES + BEAM_PARTICLES + ARM_PARTICLES
 
 // ============================================================================
 // STATE
 // ============================================================================
 
-interface BeamParticle {
-  distance: number
-  lateralOffset: number
-  verticalOffset: number
-  age: number
-  maxAge: number
-  baseIntensity: number
-  speed: number
-}
-
-const beamParticles: BeamParticle[] = []
 let beamAngle = 0
 let beamTargetAngle = 0
 let lastBeatTime = 0
 let eyeIntensity = 1
 let pupilDilation = 1
 
-// Scene objects - improved beam representation
-let ringGeometries: THREE.BufferGeometry[] = []
-let ringMaterials: THREE.LineBasicMaterial[] = []
-let ringLines: THREE.LineLoop[] = []
-
-// Volumetric beam cone using custom shader material
+// Beam mesh for thick glowing laser
 let beamMesh: THREE.Mesh | null = null
-let beamMaterial: THREE.ShaderMaterial | null = null
-
-// Inner glow sphere at eye center
-let glowSphere: THREE.Mesh | null = null
-let glowMaterial: THREE.MeshBasicMaterial | null = null
+let beamMaterial: THREE.MeshBasicMaterial | null = null
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
-
-function initBeamParticles() {
-  beamParticles.length = 0
-  const count = Math.min(config.beamParticleCount, MAX_BEAM_PARTICLES)
-  
-  for (let i = 0; i < count; i++) {
-    beamParticles.push({
-      distance: Math.random() * config.beamLength,
-      lateralOffset: (Math.random() - 0.5) * 2,
-      verticalOffset: (Math.random() - 0.5) * 2,
-      age: Math.random(),
-      maxAge: 0.5 + Math.random() * 0.7,
-      baseIntensity: 0.4 + Math.random() * 0.6,
-      speed: 30 + Math.random() * 20
-    })
-  }
-}
 
 function getPupilShape(t: number, dilation: number): { x: number; y: number } {
   const heightScale = config.pupilHeight * dilation
@@ -163,99 +122,15 @@ function getPupilShape(t: number, dilation: number): { x: number; y: number } {
   }
 }
 
-// Volumetric spotlight shader - creates realistic light cone emanating from center
-function createBeamShaderMaterial(): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      lightColor: { value: new THREE.Color(1.0, 0.6, 0.2) },
-      spotPosition: { value: new THREE.Vector3(0, 0, 0) },
-      attenuation: { value: config.beamLength * 1.2 },
-      anglePower: { value: 3.0 },
-      intensity: { value: config.beamIntensity },
-      time: { value: 0 }
-    },
-    vertexShader: `
-      varying vec3 vNormal;
-      varying vec3 vWorldPosition;
-      varying float vDistFromAxis;
-      
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-        vWorldPosition = worldPosition.xyz;
-        
-        // Calculate distance from cone axis for falloff
-        vDistFromAxis = length(position.xy);
-        
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec3 vNormal;
-      varying vec3 vWorldPosition;
-      varying float vDistFromAxis;
-      
-      uniform vec3 lightColor;
-      uniform vec3 spotPosition;
-      uniform float attenuation;
-      uniform float anglePower;
-      uniform float intensity;
-      uniform float time;
-      
-      void main() {
-        // Distance-based attenuation from the origin point
-        float distFromSpot = distance(vWorldPosition, spotPosition);
-        float distAtten = 1.0 - clamp(distFromSpot / attenuation, 0.0, 1.0);
-        distAtten = pow(distAtten, 1.5);
-        
-        // Angle-based intensity (brighter toward center of cone)
-        float rim = abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
-        float angleAtten = pow(rim, anglePower);
-        
-        // Edge softness based on distance from axis
-        float edgeSoftness = 1.0 - smoothstep(0.0, 1.0, vDistFromAxis * 0.15);
-        
-        // Flickering effect
-        float flicker = 0.9 + 0.1 * sin(time * 8.0 + distFromSpot * 0.3);
-        
-        // Combine all attenuation factors
-        float finalIntensity = distAtten * angleAtten * edgeSoftness * intensity * flicker;
-        
-        // Add subtle color variation along the beam
-        vec3 finalColor = mix(lightColor, lightColor * vec3(1.2, 0.9, 0.6), distFromSpot / attenuation);
-        
-        gl_FragColor = vec4(finalColor * finalIntensity, finalIntensity * 0.6);
-      }
-    `,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  })
-}
-
-// Create cone geometry that starts from a point (the eye center)
-function createBeamGeometry(): THREE.BufferGeometry {
-  // ConeGeometry(radius, height, radialSegments, heightSegments, openEnded)
-  // Creates a cone with apex at top (+Y), base at bottom (-Y)
-  const geometry = new THREE.ConeGeometry(
-    config.beamWidth,         // radius at base
-    config.beamLength,        // height
-    32,                       // radialSegments - smooth circle
-    1,                        // heightSegments
-    true                      // openEnded - no cap at base
+// Create thick cylindrical beam
+function createBeamGeometry(): THREE.CylinderGeometry {
+  return new THREE.CylinderGeometry(
+    config.beamWidth * 0.3,   // Top radius (slightly narrower)
+    config.beamWidth,          // Bottom radius
+    config.beamLength,         // Height
+    16,                        // Radial segments
+    1                          // Height segments
   )
-  
-  // Default cone: apex at +Y, base at -Y, centered at origin
-  // We want: apex at origin (eye center), opening toward -Z (into the scene)
-  // Rotate -90 degrees around X axis to point along Z
-  geometry.rotateX(-Math.PI / 2)
-  
-  // Now apex is at +Z, base at -Z, but centered at origin
-  // Translate so the apex (tip) is at origin
-  geometry.translate(0, 0, -config.beamLength / 2)
-  
-  return geometry
 }
 
 // ============================================================================
@@ -265,18 +140,17 @@ function createBeamGeometry(): THREE.BufferGeometry {
 export const sauronsEye: VisualizationMode = {
   id: 'saurons_eye',
   name: "Sauron's Eye",
-  description: 'The all-seeing eye with a searching beam that pulses to the music',
+  description: 'The all-seeing eye with searching beam and wavy tentacle arms',
   hideParticles: false,
 
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
-    initBeamParticles()
     beamAngle = 0
     beamTargetAngle = 0
     lastBeatTime = 0
     eyeIntensity = 1
     pupilDilation = 1
 
-    // Initialize iris particles (fiery ring)
+    // Initialize iris particles (fiery ring around pupil)
     for (let i = 0; i < CORE_PARTICLES; i++) {
       const angle = (i / CORE_PARTICLES) * Math.PI * 2
       const radiusFactor = 0.3 + Math.pow(Math.random(), 0.5) * 0.7
@@ -308,29 +182,30 @@ export const sauronsEye: VisualizationMode = {
       colors[particleIndex * 3 + 2] = 0.0
     }
 
-    // Initialize beam particles (positioned along the beam)
-    const beamCount = Math.min(config.beamParticleCount, MAX_BEAM_PARTICLES)
-    for (let i = 0; i < beamCount; i++) {
+    // Initialize beam particles (thick laser)
+    for (let i = 0; i < BEAM_PARTICLES; i++) {
       const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + i
       positions[particleIndex * 3] = 0
-      positions[particleIndex * 3 + 1] = -200  // Hidden initially
+      positions[particleIndex * 3 + 1] = -200
       positions[particleIndex * 3 + 2] = 0
       colors[particleIndex * 3] = 1.0
-      colors[particleIndex * 3 + 1] = 0.7
-      colors[particleIndex * 3 + 2] = 0.3
+      colors[particleIndex * 3 + 1] = 0.6
+      colors[particleIndex * 3 + 2] = 0.2
     }
 
-    // Initialize ambient embers
-    const emberCount = Math.min(config.emberCount, MAX_AMBIENT_PARTICLES)
-    for (let i = 0; i < emberCount; i++) {
-      const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + MAX_BEAM_PARTICLES + i
-      const radius = config.eyeSize + 5 + Math.random() * config.emberSpread
-      const angle = Math.random() * Math.PI * 2
-      positions[particleIndex * 3] = Math.cos(angle) * radius
-      positions[particleIndex * 3 + 1] = Math.sin(angle) * radius
-      positions[particleIndex * 3 + 2] = (Math.random() - 0.5) * 10
+    // Initialize arm particles (wavy tentacles)
+    for (let i = 0; i < ARM_PARTICLES; i++) {
+      const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + BEAM_PARTICLES + i
+      const armIndex = Math.floor(i / (ARM_PARTICLES / config.armCount))
+      const armAngle = (armIndex / config.armCount) * Math.PI * 2
+      const progress = (i % (ARM_PARTICLES / config.armCount)) / (ARM_PARTICLES / config.armCount)
+      const radius = config.eyeSize + progress * config.armLength
       
-      const [r, g, b] = sampleGradient(config.gradient, 0.7 + Math.random() * 0.3)
+      positions[particleIndex * 3] = Math.cos(armAngle) * radius
+      positions[particleIndex * 3 + 1] = Math.sin(armAngle) * radius
+      positions[particleIndex * 3 + 2] = 0
+      
+      const [r, g, b] = sampleGradient(config.gradient, 0.3 + progress * 0.5)
       colors[particleIndex * 3] = r
       colors[particleIndex * 3 + 1] = g
       colors[particleIndex * 3 + 2] = b
@@ -345,14 +220,7 @@ export const sauronsEye: VisualizationMode = {
   },
 
   createSceneObjects(scene: THREE.Scene): SceneObjects {
-    // Clean up existing objects
-    ringGeometries.forEach(g => g.dispose())
-    ringMaterials.forEach(m => m.dispose())
-    ringLines.forEach(l => scene.remove(l))
-    ringGeometries = []
-    ringMaterials = []
-    ringLines = []
-
+    // Clean up existing beam
     if (beamMesh) {
       beamMesh.geometry.dispose()
       scene.remove(beamMesh)
@@ -362,75 +230,29 @@ export const sauronsEye: VisualizationMode = {
       beamMaterial.dispose()
       beamMaterial = null
     }
-    if (glowSphere) {
-      glowSphere.geometry.dispose()
-      scene.remove(glowSphere)
-      glowSphere = null
-    }
-    if (glowMaterial) {
-      glowMaterial.dispose()
-      glowMaterial = null
-    }
 
-    // Create iris rings for detail
-    for (let r = 0; r < config.irisRings; r++) {
-      const geometry = new THREE.BufferGeometry()
-      const positions = new Float32Array((config.ringSegments + 1) * 3)
-      const radiusFactor = 0.4 + (r / config.irisRings) * 0.6
-      const radius = config.eyeSize * radiusFactor
+    // Create thick glowing beam cylinder
+    if (config.beamEnabled) {
+      const beamGeometry = createBeamGeometry()
+      // Rotate so it points along Z axis and starts from origin
+      beamGeometry.rotateX(Math.PI / 2)
+      beamGeometry.translate(0, 0, -config.beamLength / 2)
       
-      for (let j = 0; j <= config.ringSegments; j++) {
-        const angle = (j / config.ringSegments) * Math.PI * 2
-        positions[j * 3] = Math.cos(angle) * radius
-        positions[j * 3 + 1] = Math.sin(angle) * radius
-        positions[j * 3 + 2] = 0
-      }
-      
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-      
-      const material = new THREE.LineBasicMaterial({
-        color: 0xff4400,
+      beamMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff6600,
         transparent: true,
-        opacity: 0.4,
-        blending: THREE.AdditiveBlending,
-        linewidth: 2
+        opacity: 0.7,
+        blending: THREE.AdditiveBlending
       })
       
-      const line = new THREE.LineLoop(geometry, material)
-      scene.add(line)
-      
-      ringGeometries.push(geometry)
-      ringMaterials.push(material)
-      ringLines.push(line)
-    }
-
-    // Create central glow sphere at eye center
-    const glowGeometry = new THREE.SphereGeometry(config.eyeSize * 0.3, 16, 16)
-    glowMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff6600,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.AdditiveBlending
-    })
-    glowSphere = new THREE.Mesh(glowGeometry, glowMaterial)
-    glowSphere.position.set(0, 0, 0)
-    scene.add(glowSphere)
-
-    // Create volumetric beam cone if enabled
-    if (config.beamEnabled) {
-      beamMaterial = createBeamShaderMaterial()
-      const beamGeometry = createBeamGeometry()
       beamMesh = new THREE.Mesh(beamGeometry, beamMaterial)
-      // Position at eye center - the geometry is already set up to emanate from origin
       beamMesh.position.set(0, 0, 0)
       scene.add(beamMesh)
     }
 
     return {
-      objects: [...ringLines, beamMesh, glowSphere].filter(Boolean) as THREE.Object3D[],
+      objects: beamMesh ? [beamMesh] : [],
       update: (bands: AudioBands, time: number) => {
-        const cycleHue = getCyclingHue(time)
-        
         // Bass makes the eye more intense
         const targetIntensity = 0.7 + 
           bands.bassSmooth * 0.4 * config.bassInfluence + 
@@ -449,7 +271,7 @@ export const sauronsEye: VisualizationMode = {
           eyeIntensity = Math.min(1.5, eyeIntensity + bands.beatIntensity * 0.5 * config.beatReactivity)
         }
         
-        // Beam searches - sweeps back and forth
+        // Beam sweeps back and forth
         const sweepSpeed = config.beamSweepSpeed * (1 + bands.midSmooth * 0.8 * config.midInfluence)
         beamTargetAngle = Math.sin(time * sweepSpeed) * config.beamSweepRange * 
           (0.6 + bands.overallSmooth * 0.5)
@@ -463,89 +285,30 @@ export const sauronsEye: VisualizationMode = {
         
         // Update beam mesh
         if (beamMesh && beamMaterial) {
-          // Rotate beam around Y axis (sweeping left/right)
           beamMesh.rotation.y = beamAngle
           
-          // Update shader uniforms
-          beamMaterial.uniforms.time.value = time
-          beamMaterial.uniforms.intensity.value = config.beamIntensity * 
-            (0.6 + bands.bassSmooth * 0.4 * config.bassInfluence + bands.beatIntensity * 0.3 * config.beatReactivity)
+          // Pulsing intensity
+          const beamPulse = 0.5 + bands.bassSmooth * 0.3 + bands.beatIntensity * 0.2
+          beamMaterial.opacity = beamPulse * config.beamIntensity
           
-          // Update beam color based on gradient
-          const temp = 0.3 + bands.bassSmooth * 0.3
+          // Color from gradient
+          const temp = 0.2 + bands.bassSmooth * 0.3
           const [r, g, b] = sampleGradient(config.gradient, temp)
-          beamMaterial.uniforms.lightColor.value.setRGB(r, g, b)
-        }
-        
-        // Update glow sphere
-        if (glowSphere && glowMaterial) {
-          const glowScale = 1 + bands.bassSmooth * 0.3 + bands.beatIntensity * 0.2
-          glowSphere.scale.setScalar(glowScale)
-          glowMaterial.opacity = (0.3 + bands.beatIntensity * 0.4) * config.glowIntensity
+          beamMaterial.color.setRGB(r, g, b)
           
-          const [gr, gg, gb] = sampleGradient(config.gradient, 0.2 + cycleHue * 0.1)
-          glowMaterial.color.setRGB(gr * 1.5, gg, gb)
-        }
-        
-        // Update iris rings
-        for (let r = 0; r < config.irisRings; r++) {
-          const material = ringMaterials[r]
-          const line = ringLines[r]
-          const geometry = ringGeometries[r]
-          
-          // Pulsing scale based on audio
-          const pulse = 1 + Math.sin(time * config.pulseSpeed + r * 0.5) * 0.05 * bands.midSmooth * config.midInfluence
-          const beatPulse = bands.beatIntensity * 0.15 * config.beatReactivity
-          line.scale.setScalar(pulse + beatPulse)
-          
-          // Color shifts with audio
-          const temp = (r / config.irisRings) * 0.5 + cycleHue * config.colorCycleSpeed + bands.bassSmooth * 0.2
-          const [r2, g2, b2] = sampleGradient(config.gradient, temp)
-          material.color.setRGB(r2, g2, b2)
-          
-          // Opacity pulses
-          const ringIntensity = eyeIntensity * (0.3 + (1 - r / config.irisRings) * 0.5) * config.glowIntensity
-          material.opacity = ringIntensity * (0.4 + bands.bassSmooth * 0.3)
-          
-          // Add waviness to rings
-          const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute
-          const positions = posAttr.array as Float32Array
-          const radiusFactor = 0.4 + (r / config.irisRings) * 0.6
-          const baseRadius = config.eyeSize * radiusFactor
-          
-          for (let j = 0; j <= config.ringSegments; j++) {
-            const angle = (j / config.ringSegments) * Math.PI * 2
-            const wave = Math.sin(angle * 4 + time * 2) * 0.3 * bands.highSmooth * config.highInfluence
-            const radius = baseRadius + wave
-            positions[j * 3] = Math.cos(angle) * radius
-            positions[j * 3 + 1] = Math.sin(angle) * radius
-          }
-          posAttr.needsUpdate = true
+          // Scale beam width with bass
+          const scaleX = 1 + bands.bassSmooth * 0.5
+          beamMesh.scale.set(scaleX, scaleX, 1)
         }
       },
       dispose: () => {
-        ringGeometries.forEach(g => g.dispose())
-        ringMaterials.forEach(m => m.dispose())
-        ringLines.forEach(l => scene.remove(l))
-        
         if (beamMesh) {
           beamMesh.geometry.dispose()
           scene.remove(beamMesh)
         }
         if (beamMaterial) beamMaterial.dispose()
-        if (glowSphere) {
-          glowSphere.geometry.dispose()
-          scene.remove(glowSphere)
-        }
-        if (glowMaterial) glowMaterial.dispose()
-        
-        ringGeometries = []
-        ringMaterials = []
-        ringLines = []
         beamMesh = null
         beamMaterial = null
-        glowSphere = null
-        glowMaterial = null
       }
     }
   },
@@ -559,10 +322,9 @@ export const sauronsEye: VisualizationMode = {
     bands: AudioBands,
     time: number
   ) {
-    const dt = 0.016
     const cycleHue = getCyclingHue(time)
 
-    // Animate iris particles
+    // Animate iris particles (fiery core)
     for (let i = 0; i < Math.min(count, CORE_PARTICLES); i++) {
       const angle = (i / CORE_PARTICLES) * Math.PI * 2
       const radiusFactor = 0.3 + Math.pow((i % 100) / 100, 0.5) * 0.7
@@ -613,74 +375,51 @@ export const sauronsEye: VisualizationMode = {
       sizes[particleIndex] = 3 + edgeFactor * 2
     }
 
-    // Animate beam particles - these should emanate FROM the eye center
+    // Animate beam particles (thick glowing laser)
     if (config.beamEnabled) {
-      const beamCount = Math.min(config.beamParticleCount, MAX_BEAM_PARTICLES)
-      for (let i = 0; i < beamCount; i++) {
+      for (let i = 0; i < BEAM_PARTICLES; i++) {
         const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + i
         if (particleIndex >= count) break
         
-        const bp = beamParticles[i]
+        // Distribute along beam length with some spread
+        const progress = (i / BEAM_PARTICLES)
+        const distance = progress * config.beamLength
         
-        // Age particles
-        bp.age += dt / bp.maxAge
-        if (bp.age > 1) {
-          // Reset particle to start from eye center
-          bp.age = 0
-          bp.distance = config.beamOriginOffset
-          bp.maxAge = 0.4 + Math.random() * 0.6
-          bp.baseIntensity = 0.4 + Math.random() * 0.6
-          bp.lateralOffset = (Math.random() - 0.5) * 2
-          bp.verticalOffset = (Math.random() - 0.5) * 2
-          bp.speed = 25 + Math.random() * 25
-        }
+        // Spread increases with distance (cone effect)
+        const spreadRadius = config.beamWidth * progress * 0.8
+        const spreadAngle = (i * 2.399) // Golden angle for even distribution
+        const spreadX = Math.cos(spreadAngle) * spreadRadius * (0.5 + Math.random() * 0.5)
+        const spreadY = Math.sin(spreadAngle) * spreadRadius * (0.5 + Math.random() * 0.5)
         
-        // Move along beam direction (away from eye)
-        const speed = bp.speed + bands.bassSmooth * 30 * config.bassInfluence + bands.beatIntensity * 15 * config.beatReactivity
-        bp.distance += dt * speed
-        
-        if (bp.distance > config.beamLength) {
-          bp.age = 1 // Reset
-          continue
-        }
-        
-        // Calculate beam spread - starts narrow at eye, widens with distance
-        const beamProgress = bp.distance / config.beamLength
-        const spreadRadius = config.beamWidth * beamProgress * 0.5  // Cone spreads out
-        
-        // Position in local beam space
-        const localX = bp.lateralOffset * spreadRadius
-        const localY = bp.verticalOffset * spreadRadius
-        const localZ = -bp.distance  // Negative Z = into the scene
-        
-        // Rotate by beam angle (sweeping)
+        // Rotate by beam angle
         const cosA = Math.cos(beamAngle)
         const sinA = Math.sin(beamAngle)
         
-        // Rotate around Y axis
-        const rotatedX = localX * cosA - localZ * sinA
-        const rotatedZ = localX * sinA + localZ * cosA
+        const localZ = -distance
+        const rotatedX = spreadX * cosA - localZ * sinA
+        const rotatedZ = spreadX * sinA + localZ * cosA
         
         positions[particleIndex * 3] = rotatedX
-        positions[particleIndex * 3 + 1] = localY
+        positions[particleIndex * 3 + 1] = spreadY
         positions[particleIndex * 3 + 2] = rotatedZ
         
         // Color fades along beam
-        const life = 1 - bp.age
-        const distanceFade = 1 - beamProgress * 0.5  // Fade toward end
-        const temp = 0.1 + beamProgress * 0.4
+        const fade = 1 - progress * 0.5
+        const flicker = 0.8 + Math.sin(time * 10 + i * 0.5) * 0.2
+        const temp = 0.1 + progress * 0.4
         const [r, g, b] = sampleGradient(config.gradient, temp)
-        const brightness = bp.baseIntensity * life * distanceFade * eyeIntensity * config.glowIntensity
+        const brightness = fade * flicker * eyeIntensity * config.glowIntensity * config.beamIntensity
         
         colors[particleIndex * 3] = r * brightness
         colors[particleIndex * 3 + 1] = g * brightness
         colors[particleIndex * 3 + 2] = b * brightness
         
-        sizes[particleIndex] = (1.5 + bands.beatIntensity * 2 * config.beatReactivity) * life * distanceFade
+        // Larger particles for thicker beam
+        sizes[particleIndex] = (2 + bands.bassSmooth * 3) * fade * config.beamIntensity
       }
     } else {
-      // Hide beam particles if disabled
-      for (let i = 0; i < MAX_BEAM_PARTICLES; i++) {
+      // Hide beam particles
+      for (let i = 0; i < BEAM_PARTICLES; i++) {
         const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + i
         if (particleIndex >= count) break
         positions[particleIndex * 3 + 1] = -200
@@ -688,28 +427,64 @@ export const sauronsEye: VisualizationMode = {
       }
     }
 
-    // Animate ambient embers
-    if (config.embersEnabled) {
-      const emberCount = Math.min(config.emberCount, MAX_AMBIENT_PARTICLES)
-      for (let i = 0; i < emberCount; i++) {
-        const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + MAX_BEAM_PARTICLES + i
+    // Animate wavy arm tentacles
+    if (config.armsEnabled) {
+      const particlesPerArm = Math.floor(ARM_PARTICLES / config.armCount)
+      
+      for (let armIdx = 0; armIdx < config.armCount; armIdx++) {
+        const baseAngle = (armIdx / config.armCount) * Math.PI * 2
+        // Arms slowly rotate
+        const armRotation = time * 0.1 + armIdx * 0.2
+        const currentAngle = baseAngle + armRotation
+        
+        for (let j = 0; j < particlesPerArm; j++) {
+          const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + BEAM_PARTICLES + armIdx * particlesPerArm + j
+          if (particleIndex >= count) break
+          
+          const progress = j / particlesPerArm
+          const distance = config.eyeSize + progress * config.armLength
+          
+          // Wavy motion - sine wave that travels outward
+          const wavePhase = progress * config.armWaveFrequency * Math.PI * 2 - time * config.armSpeed
+          const waveOffset = Math.sin(wavePhase) * config.armWaveAmplitude * progress
+          
+          // Audio reactivity on waves
+          const audioWave = bands.midSmooth * 3 * Math.sin(wavePhase * 2) * progress * config.midInfluence
+          const beatWave = bands.beatIntensity * 5 * Math.sin(wavePhase * 0.5) * config.beatReactivity
+          
+          // Calculate perpendicular offset for wave
+          const perpAngle = currentAngle + Math.PI / 2
+          const totalWave = waveOffset + audioWave + beatWave
+          
+          const x = Math.cos(currentAngle) * distance + Math.cos(perpAngle) * totalWave
+          const y = Math.sin(currentAngle) * distance + Math.sin(perpAngle) * totalWave
+          const z = Math.sin(wavePhase * 0.5) * 3 * progress // Slight Z wave
+          
+          positions[particleIndex * 3] = x
+          positions[particleIndex * 3 + 1] = y
+          positions[particleIndex * 3 + 2] = z
+          
+          // Color gradient along arm
+          const temp = 0.3 + progress * 0.5 + Math.sin(wavePhase) * 0.1
+          const [r, g, b] = sampleGradient(config.gradient, temp)
+          const fade = 1 - progress * 0.6
+          const brightness = fade * eyeIntensity * config.glowIntensity
+          
+          colors[particleIndex * 3] = r * brightness
+          colors[particleIndex * 3 + 1] = g * brightness
+          colors[particleIndex * 3 + 2] = b * brightness
+          
+          // Size tapers toward end
+          sizes[particleIndex] = (1.5 + bands.bassSmooth * 2 * config.bassInfluence) * (1 - progress * 0.7)
+        }
+      }
+    } else {
+      // Hide arm particles
+      for (let i = 0; i < ARM_PARTICLES; i++) {
+        const particleIndex = CORE_PARTICLES + PUPIL_PARTICLES + BEAM_PARTICLES + i
         if (particleIndex >= count) break
-        
-        const orbitSpeed = config.emberOrbitSpeed + (i % 10) * 0.02
-        const orbitPhase = time * orbitSpeed + i * 0.5
-        const radius = config.eyeSize + 5 + (i % 20)
-        
-        positions[particleIndex * 3] = Math.cos(orbitPhase) * radius
-        positions[particleIndex * 3 + 1] = Math.sin(orbitPhase) * radius
-        positions[particleIndex * 3 + 2] = Math.sin(time + i * 0.3) * 5
-        
-        const [r, g, b] = sampleGradient(config.gradient, 0.7 + (i % 30) / 100)
-        const flicker = 0.5 + Math.sin(time * 3 + i) * 0.3 + Math.random() * 0.2
-        colors[particleIndex * 3] = r * flicker * config.glowIntensity
-        colors[particleIndex * 3 + 1] = g * flicker * config.glowIntensity
-        colors[particleIndex * 3 + 2] = b * flicker * config.glowIntensity
-        
-        sizes[particleIndex] = (0.8 + Math.sin(time * 2 + i) * 0.4) * (1 + bands.highSmooth * config.highInfluence)
+        positions[particleIndex * 3 + 1] = -200
+        sizes[particleIndex] = 0
       }
     }
 
@@ -722,15 +497,11 @@ export const sauronsEye: VisualizationMode = {
 }
 
 // ============================================================================
-// PUBLIC API - Configuration Functions (mirrors Roadway pattern)
+// PUBLIC API
 // ============================================================================
 
 export function setSauronsEyeConfig(newConfig: Partial<SauronsEyeConfig>): void {
   config = { ...config, ...newConfig }
-  // Reinitialize beam particles if count changed
-  if (newConfig.beamParticleCount !== undefined || newConfig.beamLength !== undefined) {
-    initBeamParticles()
-  }
 }
 
 export function getSauronsEyeConfig(): SauronsEyeConfig {
@@ -747,16 +518,12 @@ export function setSauronsEyeColorMode(mode: SauronsEyeConfig['colorMode']): voi
 
 export function setSauronsEyeGeometry(params: {
   eyeSize?: number
-  irisRings?: number
   pupilWidth?: number
   pupilHeight?: number
-  ringSegments?: number
 }): void {
   if (params.eyeSize !== undefined) config.eyeSize = params.eyeSize
-  if (params.irisRings !== undefined) config.irisRings = params.irisRings
   if (params.pupilWidth !== undefined) config.pupilWidth = params.pupilWidth
   if (params.pupilHeight !== undefined) config.pupilHeight = params.pupilHeight
-  if (params.ringSegments !== undefined) config.ringSegments = params.ringSegments
 }
 
 export function setSauronsEyeBeam(params: {
@@ -766,7 +533,6 @@ export function setSauronsEyeBeam(params: {
   beamSweepRange?: number
   beamSweepSpeed?: number
   beamIntensity?: number
-  beamParticleCount?: number
 }): void {
   if (params.beamEnabled !== undefined) config.beamEnabled = params.beamEnabled
   if (params.beamLength !== undefined) config.beamLength = params.beamLength
@@ -774,10 +540,6 @@ export function setSauronsEyeBeam(params: {
   if (params.beamSweepRange !== undefined) config.beamSweepRange = params.beamSweepRange
   if (params.beamSweepSpeed !== undefined) config.beamSweepSpeed = params.beamSweepSpeed
   if (params.beamIntensity !== undefined) config.beamIntensity = params.beamIntensity
-  if (params.beamParticleCount !== undefined) {
-    config.beamParticleCount = params.beamParticleCount
-    initBeamParticles()
-  }
 }
 
 export function setSauronsEyeEmbers(params: {
@@ -786,10 +548,8 @@ export function setSauronsEyeEmbers(params: {
   emberOrbitSpeed?: number
   emberSpread?: number
 }): void {
-  if (params.embersEnabled !== undefined) config.embersEnabled = params.embersEnabled
-  if (params.emberCount !== undefined) config.emberCount = params.emberCount
-  if (params.emberOrbitSpeed !== undefined) config.emberOrbitSpeed = params.emberOrbitSpeed
-  if (params.emberSpread !== undefined) config.emberSpread = params.emberSpread
+  // Arms replaced embers - map to arm params for backwards compatibility
+  if (params.embersEnabled !== undefined) config.armsEnabled = params.embersEnabled
 }
 
 export function setSauronsEyeAudioResponse(params: {
@@ -820,5 +580,4 @@ export function setSauronsEyeAnimation(params: {
 
 export function resetSauronsEyeConfig(): void {
   config = { ...DEFAULT_CONFIG }
-  initBeamParticles()
 }

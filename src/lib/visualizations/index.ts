@@ -1,7 +1,37 @@
 export type { VisualizationMode, SceneObjects } from './types'
 
-import { laserArray } from './laserArray'
-import { lavaLamp } from './lavaLamp'
+// Import enhanced laser array with full config API
+import { 
+  laserArray,
+  setLaserArrayConfig,
+  getLaserArrayConfig,
+  setLaserArrayGradient,
+  setLaserArrayColorMode,
+  setLaserArrayLasers,
+  setLaserArrayOrigin,
+  setLaserArrayAnimation,
+  setLaserArrayEffects,
+  setLaserArrayAudioResponse,
+  resetLaserArrayConfig,
+  type LaserArrayConfig
+} from './laserArray'
+
+// Import enhanced lava lamp with full config API
+import {
+  lavaLamp,
+  setLavaLampConfig,
+  getLavaLampConfig,
+  setLavaLampGradient,
+  setLavaLampColorMode,
+  setLavaLampBlobs,
+  setLavaLampMovement,
+  setLavaLampPhysics,
+  setLavaLampColors,
+  setLavaLampAudioResponse,
+  resetLavaLampConfig,
+  type LavaLampConfig
+} from './lavaLamp'
+
 import { ledMatrix } from './ledMatrix'
 import { warpField } from './warpField'
 import { yuleLog } from './yuleLog'
@@ -68,6 +98,32 @@ export const visualizations = [
 
 // Re-export visualization control functions
 export {
+  // Laser Array (enhanced)
+  setLaserArrayConfig,
+  getLaserArrayConfig,
+  setLaserArrayGradient,
+  setLaserArrayColorMode,
+  setLaserArrayLasers,
+  setLaserArrayOrigin,
+  setLaserArrayAnimation,
+  setLaserArrayEffects,
+  setLaserArrayAudioResponse,
+  resetLaserArrayConfig,
+  type LaserArrayConfig,
+  
+  // Lava Lamp (enhanced)
+  setLavaLampConfig,
+  getLavaLampConfig,
+  setLavaLampGradient,
+  setLavaLampColorMode,
+  setLavaLampBlobs,
+  setLavaLampMovement,
+  setLavaLampPhysics,
+  setLavaLampColors,
+  setLavaLampAudioResponse,
+  resetLavaLampConfig,
+  type LavaLampConfig,
+  
   // Roadway (enhanced)
   setRoadwayConfig,
   getRoadwayConfig,

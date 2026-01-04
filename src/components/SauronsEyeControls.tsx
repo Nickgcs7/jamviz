@@ -6,7 +6,6 @@ import {
   setSauronsEyeBeam,
   setSauronsEyeAudioResponse,
   setSauronsEyeAnimation,
-  setSauronsEyeColorMode,
   setSauronsEyeGradient,
   resetSauronsEyeConfig,
   builtInGradients,

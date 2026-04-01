@@ -3,7 +3,7 @@ import * as THREE from 'three'
 
 export interface SceneObjects {
   objects: THREE.Object3D[]
-  update: (bands: AudioBands, time: number) => void
+  update: (bands: AudioBands, time: number, renderer?: THREE.WebGLRenderer) => void
   dispose: () => void
 }
 

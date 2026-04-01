@@ -86,7 +86,15 @@ import {
   type SpectrumConfig
 } from './spectrumAnalyzer'
 
+// Import new visualizations
+import { fluidSimulation } from './fluidSimulation'
+import { strangeAttractor } from './strangeAttractor'
+import { flowFieldPainter } from './flowFieldPainter'
+
 export const visualizations = [
+  fluidSimulation,
+  strangeAttractor,
+  flowFieldPainter,
   roadway,
   sauronsEye,
   laserArray,

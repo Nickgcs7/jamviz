@@ -353,7 +353,7 @@ function blit(renderer: THREE.WebGLRenderer, material: THREE.ShaderMaterial, tar
   renderer.render(simScene, simCamera)
 }
 
-function splat(renderer: THREE.WebGLRenderer, target: DoubleFBO, x: number, y: number, dx: number, dy: number, color: THREE.Vector3, radius: number, aspectRatio: number) {
+function splat(renderer: THREE.WebGLRenderer, target: DoubleFBO, x: number, y: number, _dx: number, _dy: number, color: THREE.Vector3, radius: number, aspectRatio: number) {
   if (!splatMat) return
   splatMat.uniforms.uTarget.value = target.read.texture
   splatMat.uniforms.uPoint.value.set(x, y)

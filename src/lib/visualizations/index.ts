@@ -1,4 +1,4 @@
-export type { VisualizationMode, SceneObjects } from './types'
+export type { VisualizationMode, SceneObjects, PostProcessingPrefs } from './types'
 
 // Import enhanced laser array with full config API
 import { 
@@ -90,11 +90,15 @@ import {
 import { fluidSimulation } from './fluidSimulation'
 import { strangeAttractor } from './strangeAttractor'
 import { flowFieldPainter } from './flowFieldPainter'
+import { crtOscilloscope } from './crtOscilloscope'
+import { reactionDiffusion } from './reactionDiffusion'
 
 export const visualizations = [
   fluidSimulation,
   strangeAttractor,
   flowFieldPainter,
+  crtOscilloscope,
+  reactionDiffusion,
   roadway,
   sauronsEye,
   laserArray,

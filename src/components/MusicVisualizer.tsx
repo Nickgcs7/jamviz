@@ -221,9 +221,11 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       const isLedMatrix = currentMode.id === 'led_matrix'
       const isFluidSim = currentMode.id === 'fluid_simulation'
       const isFlowField = currentMode.id === 'flow_field'
+      const isCRT = currentMode.id === 'crt_oscilloscope'
+      const isRD = currentMode.id === 'reaction_diffusion'
       const isSpectrum = currentMode.id === 'spectrum_analyzer'
       const isSauronsEye = currentMode.id === 'saurons_eye'
-      const cameraIntensity = (isLedMatrix || isSpectrum || isFluidSim || isFlowField) ? 0.15 : isSauronsEye ? 0.5 : 1.0
+      const cameraIntensity = (isLedMatrix || isSpectrum || isFluidSim || isFlowField || isCRT || isRD) ? 0.15 : isSauronsEye ? 0.5 : 1.0
       const targetCameraX = (Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3) * cameraIntensity
       const targetCameraY = (Math.cos(time * 0.1) * 4 + bands.highSmooth * 4) * cameraIntensity
       const targetCameraZ = (isLedMatrix || isSpectrum) ? 55 : isSauronsEye ? 45 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
@@ -302,6 +304,15 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     setShowSauronsEyeControls(false)
     setShowLaserArrayControls(false)
     setShowLavaLampControls(false)
+    // Apply per-visualization post-processing preferences
+    if (mode.postProcessing && sceneRef.current) {
+      const pp = mode.postProcessing
+      const refs = sceneRef.current
+      if (pp.bloomStrength !== undefined) refs.currentBloom = pp.bloomStrength
+      if (pp.bloomRadius !== undefined) refs.bloomPass.radius = pp.bloomRadius
+      if (pp.afterimage !== undefined) refs.currentAfterimage = pp.afterimage
+      if (pp.rgbShift !== undefined) refs.currentRgbShift = pp.rgbShift
+    }
   }, [updateParticleLayout, ledText])
 
   const handlePresetChange = useCallback((presetId: string) => {

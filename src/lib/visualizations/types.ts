@@ -1,6 +1,13 @@
 import type { AudioBands } from '../AudioAnalyzer'
 import * as THREE from 'three'
 
+export interface PostProcessingPrefs {
+  bloomStrength?: number
+  bloomRadius?: number
+  afterimage?: number
+  rgbShift?: number
+}
+
 export interface SceneObjects {
   objects: THREE.Object3D[]
   update: (bands: AudioBands, time: number, renderer?: THREE.WebGLRenderer) => void
@@ -12,7 +19,6 @@ export interface VisualizationMode {
   name: string
   description: string
   
-  // Standard particle-based rendering
   initParticles(positions: Float32Array, colors: Float32Array, count: number): void
   animate(
     positions: Float32Array,
@@ -24,19 +30,16 @@ export interface VisualizationMode {
     time: number
   ): void
   
-  // Optional: Custom scene objects (lines, meshes, etc.)
   createSceneObjects?: (scene: THREE.Scene) => SceneObjects
-  
-  // Optional: Whether to hide default particles (useful for line-only visualizations)
   hideParticles?: boolean
   
-  // Optional: Text configuration for visualizations that support text input
   textConfig?: {
     enabled: boolean
     placeholder: string
     defaultText: string
   }
-  
-  // Optional: Method to update text (called when user changes text input)
   setText?: (text: string) => void
+  
+  // Per-visualization post-processing preferences
+  postProcessing?: PostProcessingPrefs
 }

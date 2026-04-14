@@ -32,11 +32,6 @@ import {
   type LavaLampConfig
 } from './lavaLamp'
 
-import { ledMatrix } from './ledMatrix'
-import { warpField } from './warpField'
-import { yuleLog } from './yuleLog'
-import { radialSpectrum, setRadialMode, getRadialMode, setRadialGradient } from './radialSpectrum'
-
 // Import roadway with full config API
 import { 
   roadway,
@@ -70,22 +65,6 @@ import {
   type SauronsEyeConfig
 } from './sauronsEye'
 
-// Import enhanced spectrum analyzer with full config API
-import { 
-  spectrumAnalyzer,
-  setSpectrumConfig,
-  getSpectrumConfig,
-  setSpectrumGradient, 
-  setSpectrumSmoothing,
-  setSpectrumColorMode,
-  setSpectrumSpin,
-  setLedParams,
-  setReflexParams,
-  setPeakParams,
-  setOverlayParams,
-  type SpectrumConfig
-} from './spectrumAnalyzer'
-
 // Import new visualizations
 import { fluidSimulation } from './fluidSimulation'
 import { strangeAttractor } from './strangeAttractor'
@@ -103,11 +82,6 @@ export const visualizations = [
   sauronsEye,
   laserArray,
   lavaLamp,
-  ledMatrix,
-  warpField,
-  yuleLog,
-  radialSpectrum,
-  spectrumAnalyzer
 ]
 
 // Re-export visualization control functions
@@ -164,24 +138,6 @@ export {
   setSauronsEyeAnimation,
   resetSauronsEyeConfig,
   type SauronsEyeConfig,
-  
-  // Radial Spectrum
-  setRadialMode,
-  getRadialMode,
-  setRadialGradient,
-  
-  // Spectrum Analyzer (enhanced)
-  setSpectrumConfig,
-  getSpectrumConfig,
-  setSpectrumGradient,
-  setSpectrumSmoothing,
-  setSpectrumColorMode,
-  setSpectrumSpin,
-  setLedParams,
-  setReflexParams,
-  setPeakParams,
-  setOverlayParams,
-  type SpectrumConfig
 }
 
 // Re-export gradient system from parent

@@ -11,16 +11,17 @@ import { AudioAnalyzer, type AudioBands, createDefaultAudioBands } from '@/lib/A
 import { particleVertexShader, particleFragmentShader } from '@/lib/shaders'
 import { visualizations, type VisualizationMode, type SceneObjects } from '@/lib/visualizations'
 import { postProcessingPresets, getPresetNames, getCurrentPreset, setPreset, getAudioReactiveSettings } from '@/lib/postProcessingPresets'
-import SpectrumControls from './SpectrumControls'
 import RoadwayControls from './RoadwayControls'
 import SauronsEyeControls from './SauronsEyeControls'
 import LaserArrayControls from './LaserArrayControls'
 import LavaLampControls from './LavaLampControls'
 
 const PARTICLE_COUNT = 10000
-const POSITION_LERP_FACTOR = 0.12
-const SIZE_LERP_FACTOR = 0.15
-const COLOR_LERP_FACTOR = 0.08
+
+// Base lerp factors — boosted dynamically on transients
+const BASE_POSITION_LERP = 0.18
+const BASE_SIZE_LERP = 0.22
+const BASE_COLOR_LERP = 0.12
 const CAMERA_LERP_FACTOR = 0.04
 const ROTATION_LERP_FACTOR = 0.06
 const POST_PROCESS_LERP = 0.1
@@ -47,6 +48,7 @@ interface SceneRefs {
   currentRgbShift: number
   currentAfterimage: number
   customSceneObjects: SceneObjects | null
+  onsetBoost: number
 }
 
 interface MusicVisualizerProps {
@@ -65,7 +67,6 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const [showUI, setShowUI] = useState(true)
   const [showPresets, setShowPresets] = useState(false)
   const [showModeList, setShowModeList] = useState(false)
-  const [showSpectrumControls, setShowSpectrumControls] = useState(false)
   const [showRoadwayControls, setShowRoadwayControls] = useState(false)
   const [showSauronsEyeControls, setShowSauronsEyeControls] = useState(false)
   const [showLaserArrayControls, setShowLaserArrayControls] = useState(false)
@@ -159,7 +160,8 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       currentRotationSpeed: 0.001, currentRotationX: 0,
       afterimagePass, rgbShiftPass, bloomPass,
       currentBloom: settings.bloomStrength, currentRgbShift: settings.rgbShiftAmount, currentAfterimage: settings.afterimageStrength,
-      customSceneObjects
+      customSceneObjects,
+      onsetBoost: 0,
     }
   }, [currentMode, isMobile])
 
@@ -196,6 +198,10 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       let bands: AudioBands = createDefaultAudioBands()
       if (analyzerRef.current && isListening) bands = analyzerRef.current.getBands()
 
+      // Adaptive onset boost — spikes on transients, decays quickly
+      if (bands.isOnset) refs.onsetBoost = Math.max(refs.onsetBoost, bands.onsetIntensity)
+      refs.onsetBoost *= 0.85 // fast decay
+
       const ppSettings = getAudioReactiveSettings(bands)
       refs.currentBloom = lerp(refs.currentBloom, ppSettings.bloomStrength, POST_PROCESS_LERP)
       refs.currentRgbShift = lerp(refs.currentRgbShift, ppSettings.rgbShiftAmount, POST_PROCESS_LERP)
@@ -208,9 +214,16 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
 
       if (particles.visible) {
         currentMode.animate(targetPositions, originalPositions, targetSizes, targetColors, PARTICLE_COUNT, bands, time)
-        for (let i = 0; i < positions.length; i++) positions[i] = lerp(positions[i], targetPositions[i], POSITION_LERP_FACTOR)
-        for (let i = 0; i < sizes.length; i++) sizes[i] = lerp(sizes[i], targetSizes[i], SIZE_LERP_FACTOR)
-        for (let i = 0; i < colors.length; i++) colors[i] = lerp(colors[i], targetColors[i], COLOR_LERP_FACTOR)
+
+        // Dynamic lerp factors: boost on onsets for transient punch-through
+        const boost = refs.onsetBoost
+        const posLerp = BASE_POSITION_LERP + boost * 0.25
+        const sizeLerp = BASE_SIZE_LERP + boost * 0.30
+        const colorLerp = BASE_COLOR_LERP + boost * 0.15
+
+        for (let i = 0; i < positions.length; i++) positions[i] = lerp(positions[i], targetPositions[i], posLerp)
+        for (let i = 0; i < sizes.length; i++) sizes[i] = lerp(sizes[i], targetSizes[i], sizeLerp)
+        for (let i = 0; i < colors.length; i++) colors[i] = lerp(colors[i], targetColors[i], colorLerp)
         particles.geometry.attributes.position.needsUpdate = true
         particles.geometry.attributes.size.needsUpdate = true
         particles.geometry.attributes.customColor.needsUpdate = true
@@ -218,17 +231,14 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
         currentMode.animate(targetPositions, originalPositions, targetSizes, targetColors, PARTICLE_COUNT, bands, time)
       }
 
-      const isLedMatrix = currentMode.id === 'led_matrix'
-      const isFluidSim = currentMode.id === 'fluid_simulation'
-      const isFlowField = currentMode.id === 'flow_field'
-      const isCRT = currentMode.id === 'crt_oscilloscope'
-      const isRD = currentMode.id === 'reaction_diffusion'
-      const isSpectrum = currentMode.id === 'spectrum_analyzer'
+      // Camera — fullscreen shader visuals get minimal sway, particle visuals get full motion
+      const isFullscreenShader = currentMode.id === 'fluid_simulation' || currentMode.id === 'flow_field' ||
+                                  currentMode.id === 'crt_oscilloscope' || currentMode.id === 'reaction_diffusion'
       const isSauronsEye = currentMode.id === 'saurons_eye'
-      const cameraIntensity = (isLedMatrix || isSpectrum || isFluidSim || isFlowField || isCRT || isRD) ? 0.15 : isSauronsEye ? 0.5 : 1.0
+      const cameraIntensity = isFullscreenShader ? 0.15 : isSauronsEye ? 0.5 : 1.0
       const targetCameraX = (Math.sin(time * 0.08) * 6 + bands.midSmooth * 6 + bands.beatIntensity * 3) * cameraIntensity
       const targetCameraY = (Math.cos(time * 0.1) * 4 + bands.highSmooth * 4) * cameraIntensity
-      const targetCameraZ = (isLedMatrix || isSpectrum) ? 55 : isSauronsEye ? 45 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
+      const targetCameraZ = isSauronsEye ? 45 : 50 + Math.sin(time * 0.05) * 5 - bands.bassSmooth * 8
       refs.currentCameraX = lerp(refs.currentCameraX, targetCameraX, CAMERA_LERP_FACTOR)
       refs.currentCameraY = lerp(refs.currentCameraY, targetCameraY, CAMERA_LERP_FACTOR)
       refs.currentCameraZ = lerp(refs.currentCameraZ, targetCameraZ, CAMERA_LERP_FACTOR)
@@ -237,15 +247,13 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       camera.position.z = refs.currentCameraZ
       camera.lookAt(0, 0, 0)
 
-      if (particles.visible && !currentMode.hideParticles && !isLedMatrix && !isSpectrum) {
+      if (particles.visible && !currentMode.hideParticles) {
         const targetRotationSpeed = 0.0003 + bands.overallSmooth * 0.008 + bands.beatIntensity * 0.004
         refs.currentRotationSpeed = lerp(refs.currentRotationSpeed, targetRotationSpeed, ROTATION_LERP_FACTOR)
         particles.rotation.y += refs.currentRotationSpeed
         const targetRotationX = bands.midSmooth * 0.1
         refs.currentRotationX = lerp(refs.currentRotationX, targetRotationX, ROTATION_LERP_FACTOR)
         particles.rotation.x = refs.currentRotationX
-      } else if (isLedMatrix || isSpectrum) {
-        particles.rotation.x = 0; particles.rotation.y = 0; particles.rotation.z = 0
       }
       composer.render()
     }
@@ -299,7 +307,6 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
     updateParticleLayout(mode)
     if (mode.setText) mode.setText(ledText)
     setShowModeList(false)
-    setShowSpectrumControls(false)
     setShowRoadwayControls(false)
     setShowSauronsEyeControls(false)
     setShowLaserArrayControls(false)
@@ -346,17 +353,15 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
   const stopAudio = () => { analyzerRef.current?.disconnect(); analyzerRef.current = null; setIsListening(false) }
   const presetNames = getPresetNames()
 
-  const hasSettingsPanel = currentMode.id === 'spectrum_analyzer' || currentMode.id === 'roadway' || 
+  const hasSettingsPanel = currentMode.id === 'roadway' || 
                           currentMode.id === 'saurons_eye' || currentMode.id === 'laser_array' || currentMode.id === 'lava_lamp'
-  const isSettingsPanelOpen = (currentMode.id === 'spectrum_analyzer' && showSpectrumControls) ||
-                              (currentMode.id === 'roadway' && showRoadwayControls) ||
+  const isSettingsPanelOpen = (currentMode.id === 'roadway' && showRoadwayControls) ||
                               (currentMode.id === 'saurons_eye' && showSauronsEyeControls) ||
                               (currentMode.id === 'laser_array' && showLaserArrayControls) ||
                               (currentMode.id === 'lava_lamp' && showLavaLampControls)
 
   const handleSettingsClick = () => {
-    if (currentMode.id === 'spectrum_analyzer') setShowSpectrumControls(!showSpectrumControls)
-    else if (currentMode.id === 'roadway') setShowRoadwayControls(!showRoadwayControls)
+    if (currentMode.id === 'roadway') setShowRoadwayControls(!showRoadwayControls)
     else if (currentMode.id === 'saurons_eye') setShowSauronsEyeControls(!showSauronsEyeControls)
     else if (currentMode.id === 'laser_array') setShowLaserArrayControls(!showLaserArrayControls)
     else if (currentMode.id === 'lava_lamp') setShowLavaLampControls(!showLavaLampControls)
@@ -465,7 +470,6 @@ export default function MusicVisualizer({ onBack }: MusicVisualizerProps) {
       
       {isMobile && !showUI && (<div className="absolute inset-0 z-20" onClick={() => setShowUI(true)} />)}
       
-      <SpectrumControls visible={showSpectrumControls && currentMode.id === 'spectrum_analyzer'} onClose={() => setShowSpectrumControls(false)} />
       <RoadwayControls visible={showRoadwayControls && currentMode.id === 'roadway'} onClose={() => setShowRoadwayControls(false)} />
       <SauronsEyeControls visible={showSauronsEyeControls && currentMode.id === 'saurons_eye'} onClose={() => setShowSauronsEyeControls(false)} />
       <LaserArrayControls visible={showLaserArrayControls && currentMode.id === 'laser_array'} onClose={() => setShowLaserArrayControls(false)} />

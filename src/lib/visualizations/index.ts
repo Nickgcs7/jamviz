@@ -32,11 +32,6 @@ import {
   type LavaLampConfig
 } from './lavaLamp'
 
-import { ledMatrix } from './ledMatrix'
-import { warpField } from './warpField'
-import { yuleLog } from './yuleLog'
-import { radialSpectrum, setRadialMode, getRadialMode, setRadialGradient } from './radialSpectrum'
-
 // Import roadway with full config API
 import { 
   roadway,
@@ -70,28 +65,13 @@ import {
   type SauronsEyeConfig
 } from './sauronsEye'
 
-// Import enhanced spectrum analyzer with full config API
-import { 
-  spectrumAnalyzer,
-  setSpectrumConfig,
-  getSpectrumConfig,
-  setSpectrumGradient, 
-  setSpectrumSmoothing,
-  setSpectrumColorMode,
-  setSpectrumSpin,
-  setLedParams,
-  setReflexParams,
-  setPeakParams,
-  setOverlayParams,
-  type SpectrumConfig
-} from './spectrumAnalyzer'
-
-// Import new visualizations
+// Import visualizations
 import { fluidSimulation } from './fluidSimulation'
 import { strangeAttractor } from './strangeAttractor'
 import { flowFieldPainter } from './flowFieldPainter'
 import { crtOscilloscope } from './crtOscilloscope'
 import { reactionDiffusion } from './reactionDiffusion'
+import { explosion } from './explosion'
 
 export const visualizations = [
   fluidSimulation,
@@ -103,85 +83,36 @@ export const visualizations = [
   sauronsEye,
   laserArray,
   lavaLamp,
-  ledMatrix,
-  warpField,
-  yuleLog,
-  radialSpectrum,
-  spectrumAnalyzer
 ]
 
 // Re-export visualization control functions
 export {
-  // Laser Array (enhanced)
-  setLaserArrayConfig,
-  getLaserArrayConfig,
-  setLaserArrayGradient,
-  setLaserArrayColorMode,
-  setLaserArrayLasers,
-  setLaserArrayOrigin,
-  setLaserArrayAnimation,
-  setLaserArrayEffects,
-  setLaserArrayAudioResponse,
-  resetLaserArrayConfig,
-  type LaserArrayConfig,
+  // Laser Array
+  setLaserArrayConfig, getLaserArrayConfig, setLaserArrayGradient,
+  setLaserArrayColorMode, setLaserArrayLasers, setLaserArrayOrigin,
+  setLaserArrayAnimation, setLaserArrayEffects, setLaserArrayAudioResponse,
+  resetLaserArrayConfig, type LaserArrayConfig,
   
-  // Lava Lamp (enhanced)
-  setLavaLampConfig,
-  getLavaLampConfig,
-  setLavaLampGradient,
-  setLavaLampColorMode,
-  setLavaLampBlobs,
-  setLavaLampMovement,
-  setLavaLampPhysics,
-  setLavaLampColors,
-  setLavaLampAudioResponse,
-  resetLavaLampConfig,
-  type LavaLampConfig,
+  // Lava Lamp
+  setLavaLampConfig, getLavaLampConfig, setLavaLampGradient,
+  setLavaLampColorMode, setLavaLampBlobs, setLavaLampMovement,
+  setLavaLampPhysics, setLavaLampColors, setLavaLampAudioResponse,
+  resetLavaLampConfig, type LavaLampConfig,
   
-  // Roadway (enhanced)
-  setRoadwayConfig,
-  getRoadwayConfig,
-  setRoadwayGradient,
-  setRoadwayColorMode,
-  setRoadwayLaneParams,
-  setRoadwayLineParams,
-  setRoadwayEffects,
-  setRoadwayAudioResponse,
-  setRoadwayRoadLines,
-  setRoadwayHorizonGlow,
-  resetRoadwayConfig,
-  type RoadwayConfig,
+  // Roadway
+  setRoadwayConfig, getRoadwayConfig, setRoadwayGradient,
+  setRoadwayColorMode, setRoadwayLaneParams, setRoadwayLineParams,
+  setRoadwayEffects, setRoadwayAudioResponse, setRoadwayRoadLines,
+  setRoadwayHorizonGlow, resetRoadwayConfig, type RoadwayConfig,
   
-  // Sauron's Eye (enhanced)
-  setSauronsEyeConfig,
-  getSauronsEyeConfig,
-  setSauronsEyeGradient,
-  setSauronsEyeColorMode,
-  setSauronsEyeGeometry,
-  setSauronsEyeBeam,
-  setSauronsEyeEmbers,
-  setSauronsEyeAudioResponse,
-  setSauronsEyeAnimation,
-  resetSauronsEyeConfig,
-  type SauronsEyeConfig,
-  
-  // Radial Spectrum
-  setRadialMode,
-  getRadialMode,
-  setRadialGradient,
-  
-  // Spectrum Analyzer (enhanced)
-  setSpectrumConfig,
-  getSpectrumConfig,
-  setSpectrumGradient,
-  setSpectrumSmoothing,
-  setSpectrumColorMode,
-  setSpectrumSpin,
-  setLedParams,
-  setReflexParams,
-  setPeakParams,
-  setOverlayParams,
-  type SpectrumConfig
+  // Sauron's Eye
+  setSauronsEyeConfig, getSauronsEyeConfig, setSauronsEyeGradient,
+  setSauronsEyeColorMode, setSauronsEyeGeometry, setSauronsEyeBeam,
+  setSauronsEyeEmbers, setSauronsEyeAudioResponse, setSauronsEyeAnimation,
+  resetSauronsEyeConfig, type SauronsEyeConfig,
+
+  // Explosion
+  explosion,
 }
 
 // Re-export gradient system from parent

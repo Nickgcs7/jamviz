@@ -65,13 +65,12 @@ import {
   type SauronsEyeConfig
 } from './sauronsEye'
 
-// Import visualizations
+// Import new visualizations
 import { fluidSimulation } from './fluidSimulation'
 import { strangeAttractor } from './strangeAttractor'
 import { flowFieldPainter } from './flowFieldPainter'
 import { crtOscilloscope } from './crtOscilloscope'
 import { reactionDiffusion } from './reactionDiffusion'
-import { explosion } from './explosion'
 
 export const visualizations = [
   fluidSimulation,
@@ -87,32 +86,58 @@ export const visualizations = [
 
 // Re-export visualization control functions
 export {
-  // Laser Array
-  setLaserArrayConfig, getLaserArrayConfig, setLaserArrayGradient,
-  setLaserArrayColorMode, setLaserArrayLasers, setLaserArrayOrigin,
-  setLaserArrayAnimation, setLaserArrayEffects, setLaserArrayAudioResponse,
-  resetLaserArrayConfig, type LaserArrayConfig,
+  // Laser Array (enhanced)
+  setLaserArrayConfig,
+  getLaserArrayConfig,
+  setLaserArrayGradient,
+  setLaserArrayColorMode,
+  setLaserArrayLasers,
+  setLaserArrayOrigin,
+  setLaserArrayAnimation,
+  setLaserArrayEffects,
+  setLaserArrayAudioResponse,
+  resetLaserArrayConfig,
+  type LaserArrayConfig,
   
-  // Lava Lamp
-  setLavaLampConfig, getLavaLampConfig, setLavaLampGradient,
-  setLavaLampColorMode, setLavaLampBlobs, setLavaLampMovement,
-  setLavaLampPhysics, setLavaLampColors, setLavaLampAudioResponse,
-  resetLavaLampConfig, type LavaLampConfig,
+  // Lava Lamp (enhanced)
+  setLavaLampConfig,
+  getLavaLampConfig,
+  setLavaLampGradient,
+  setLavaLampColorMode,
+  setLavaLampBlobs,
+  setLavaLampMovement,
+  setLavaLampPhysics,
+  setLavaLampColors,
+  setLavaLampAudioResponse,
+  resetLavaLampConfig,
+  type LavaLampConfig,
   
-  // Roadway
-  setRoadwayConfig, getRoadwayConfig, setRoadwayGradient,
-  setRoadwayColorMode, setRoadwayLaneParams, setRoadwayLineParams,
-  setRoadwayEffects, setRoadwayAudioResponse, setRoadwayRoadLines,
-  setRoadwayHorizonGlow, resetRoadwayConfig, type RoadwayConfig,
+  // Roadway (enhanced)
+  setRoadwayConfig,
+  getRoadwayConfig,
+  setRoadwayGradient,
+  setRoadwayColorMode,
+  setRoadwayLaneParams,
+  setRoadwayLineParams,
+  setRoadwayEffects,
+  setRoadwayAudioResponse,
+  setRoadwayRoadLines,
+  setRoadwayHorizonGlow,
+  resetRoadwayConfig,
+  type RoadwayConfig,
   
-  // Sauron's Eye
-  setSauronsEyeConfig, getSauronsEyeConfig, setSauronsEyeGradient,
-  setSauronsEyeColorMode, setSauronsEyeGeometry, setSauronsEyeBeam,
-  setSauronsEyeEmbers, setSauronsEyeAudioResponse, setSauronsEyeAnimation,
-  resetSauronsEyeConfig, type SauronsEyeConfig,
-
-  // Explosion
-  explosion,
+  // Sauron's Eye (enhanced)
+  setSauronsEyeConfig,
+  getSauronsEyeConfig,
+  setSauronsEyeGradient,
+  setSauronsEyeColorMode,
+  setSauronsEyeGeometry,
+  setSauronsEyeBeam,
+  setSauronsEyeEmbers,
+  setSauronsEyeAudioResponse,
+  setSauronsEyeAnimation,
+  resetSauronsEyeConfig,
+  type SauronsEyeConfig,
 }
 
 // Re-export gradient system from parent

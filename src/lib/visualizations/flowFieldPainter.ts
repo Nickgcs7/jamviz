@@ -4,6 +4,16 @@
  * Particles trace paths through a curl noise vector field,
  * leaving luminous trails via the afterimage post-processing pass.
  * Audio warps the noise field parameters.
+ * 
+ * Audio mapping:
+ *   - subBass/bass → noise amplitude & field scale (breathing)
+ *   - mid → noise evolution speed
+ *   - highMid/treble → turbulence octaves
+ *   - spectralCentroid → warm/cool color palette (bass paints warm, treble paints cool)
+ *   - energyTrend → turbulence level (buildups = chaotic, drops = smooth laminar flow)
+ *   - isOnset → color splash injection + field shift
+ *   - rms → overall trail brightness & particle size
+ *   - stereoBalance → wind bias
  */
 
 import type { VisualizationMode } from './types'
@@ -71,23 +81,35 @@ let noiseTime = 0
 let currentNoiseScale = FIELD_SCALE
 let currentFlowSpeed = FLOW_SPEED
 let currentTurbulence = 2
-let beatFieldShift = 0
-let lastBeatTime = 0
+let onsetFieldShift = 0
+let lastOnsetTime = 0
 let initialized = false
 let particleAge: Float32Array | null = null
 let particleHue: Float32Array | null = null
+let smoothedCentroid = 0.5
+let smoothedRMS = 0
+let smoothedTrend = 0
+let onsetSplash = 0
 
 export const flowFieldPainter: VisualizationMode = {
   id: 'flow_field',
   name: 'Flow Field',
   description: 'Particles paint through invisible force fields driven by sound',
 
+  postProcessing: {
+    bloomStrength: 0.4,
+    bloomRadius: 0.3,
+    afterimage: 0.93,
+    rgbShift: 0.0004,
+  },
+
   initParticles(positions: Float32Array, colors: Float32Array, count: number) {
     initNoise(42)
     particleAge = new Float32Array(count)
     particleHue = new Float32Array(count)
     noiseTime = 0; currentNoiseScale = FIELD_SCALE; currentFlowSpeed = FLOW_SPEED
-    currentTurbulence = 2; beatFieldShift = 0; initialized = true
+    currentTurbulence = 2; onsetFieldShift = 0; initialized = true
+    smoothedCentroid = 0.5; smoothedRMS = 0; smoothedTrend = 0; onsetSplash = 0
     for (let i = 0; i < count; i++) {
       positions[i*3] = (Math.random()-0.5)*PARTICLE_SPREAD*2
       positions[i*3+1] = (Math.random()-0.5)*PARTICLE_SPREAD*2
@@ -101,19 +123,36 @@ export const flowFieldPainter: VisualizationMode = {
   animate(positions: Float32Array, _orig: Float32Array, sizes: Float32Array, colors: Float32Array, count: number, bands: AudioBands, time: number) {
     if (!initialized || !particleAge || !particleHue) return
 
-    const targetScale = FIELD_SCALE * (0.5 + bands.bassSmooth * 2)
+    // Smooth high-level features
+    smoothedCentroid += (bands.spectralCentroid - smoothedCentroid) * 0.05
+    smoothedRMS += (bands.rms - smoothedRMS) * 0.08
+    smoothedTrend += (bands.energyTrend - smoothedTrend) * 0.04
+
+    // Noise field scale breathes with sub-bass
+    const targetScale = FIELD_SCALE * (0.5 + bands.subBassSmooth * 1.5 + bands.bassSmooth * 1.5)
     currentNoiseScale += (targetScale - currentNoiseScale) * 0.05
-    const targetSpeed = FLOW_SPEED * (0.3 + bands.overallSmooth * 4 + bands.beatIntensity * 2)
+
+    // Flow speed driven by overall energy + onset punch
+    const targetSpeed = FLOW_SPEED * (0.3 + bands.overallSmooth * 4 + bands.onsetIntensity * 3)
     currentFlowSpeed += (targetSpeed - currentFlowSpeed) * 0.08
-    const targetTurb = 2 + Math.round(bands.highMidSmooth * 3)
+
+    // Turbulence octaves: energyTrend drives chaos (buildups → more octaves)
+    const trendTurb = Math.max(0, smoothedTrend) * 2
+    const targetTurb = 2 + Math.round(bands.highMidSmooth * 2 + bands.trebleSmooth * 1 + trendTurb)
     currentTurbulence += (targetTurb - currentTurbulence) * 0.1
-    const evoSpeed = NOISE_EVOLUTION * (0.5 + bands.midSmooth * 3)
+
+    // Noise evolution speed from mid frequencies
+    const evoSpeed = NOISE_EVOLUTION * (0.5 + bands.midSmooth * 3 + bands.lowMidSmooth * 1.5)
     noiseTime += 0.016 * evoSpeed
 
-    if (bands.isBeat && bands.beatIntensity > 0.4 && time - lastBeatTime > 0.25) {
-      beatFieldShift += bands.beatIntensity * 2; lastBeatTime = time
+    // Onset → field disruption + color splash
+    if (bands.isOnset && time - lastOnsetTime > 0.2) {
+      onsetFieldShift += bands.onsetIntensity * 2.5
+      onsetSplash = bands.onsetIntensity
+      lastOnsetTime = time
     }
-    beatFieldShift *= 0.95
+    onsetFieldShift *= 0.94
+    onsetSplash *= 0.90
 
     const windBias = bands.stereoBalance * 15 * bands.overallSmooth
     const cycleHue = getCyclingHue(time)
@@ -128,8 +167,15 @@ export const flowFieldPainter: VisualizationMode = {
       const tooOld = particleAge[i] > 300 + Math.random() * 400
 
       if (outOfBounds || (tooOld && i < respawnThisFrame * 150)) {
-        if (bands.overallSmooth > 0.3 && Math.random() < 0.3) {
-          positions[idx] = (Math.random()-0.5)*20; positions[idx+1] = (Math.random()-0.5)*20
+        // On onset, cluster some respawns near center for "splash" effect
+        if (onsetSplash > 0.3 && Math.random() < onsetSplash * 0.5) {
+          const angle = Math.random() * Math.PI * 2
+          const dist = Math.random() * 15
+          positions[idx] = Math.cos(angle) * dist
+          positions[idx+1] = Math.sin(angle) * dist
+        } else if (bands.overallSmooth > 0.3 && Math.random() < 0.3) {
+          positions[idx] = (Math.random()-0.5)*20
+          positions[idx+1] = (Math.random()-0.5)*20
         } else {
           const edge = Math.floor(Math.random()*4)
           if(edge===0){positions[idx]=-PARTICLE_SPREAD;positions[idx+1]=(Math.random()-0.5)*PARTICLE_SPREAD*2}
@@ -138,23 +184,31 @@ export const flowFieldPainter: VisualizationMode = {
           else{positions[idx]=(Math.random()-0.5)*PARTICLE_SPREAD*2;positions[idx+1]=PARTICLE_SPREAD}
         }
         positions[idx+2] = (Math.random()-0.5)*1.5
-        particleAge[i] = 0; particleHue[i] = Math.random(); continue
+        particleAge[i] = 0
+        // New hue on splash: tinted by onset energy
+        particleHue[i] = onsetSplash > 0.3 ? (smoothedCentroid + Math.random() * 0.2) % 1 : Math.random()
+        continue
       }
 
-      const flow = fbmCurl(px*currentNoiseScale, py*currentNoiseScale, noiseTime+beatFieldShift, Math.round(currentTurbulence))
+      const flow = fbmCurl(px*currentNoiseScale, py*currentNoiseScale, noiseTime+onsetFieldShift, Math.round(currentTurbulence))
       positions[idx] += flow.dx * currentFlowSpeed + windBias * 0.016
       positions[idx+1] += flow.dy * currentFlowSpeed
       positions[idx+2] += (Math.random()-0.5)*0.02
 
+      // Size: rms-driven base + age fade
       const ageNorm = Math.min(1, particleAge[i]/20)
       const fadeOut = particleAge[i] > 500 ? Math.max(0, 1-(particleAge[i]-500)/100) : 1
-      sizes[i] = (1.0 + bands.overallSmooth * 1.5) * ageNorm * fadeOut
+      sizes[i] = (0.8 + smoothedRMS * 2.0 + onsetSplash * 1.5) * ageNorm * fadeOut
 
-      const posHue = (px+PARTICLE_SPREAD)/(PARTICLE_SPREAD*2)*0.3
-      const hue = (particleHue[i]*0.4 + posHue + cycleHue*0.5 + bands.bassSmooth*0.1) % 1
-      const sat = 0.6 + bands.overallSmooth * 0.3
-      const lit = TRAIL_BRIGHTNESS * ageNorm * fadeOut * (0.6 + bands.overallSmooth*0.3 + bands.beatIntensity*0.2)
-      const [r,g,b] = hslToRgb(hue, sat, lit)
+      // Color: spectralCentroid drives warm/cool palette
+      // Low centroid (bassy) → warm hues (red/amber 0.0-0.15)
+      // High centroid (bright) → cool hues (cyan/blue 0.5-0.7)
+      const centroidHue = smoothedCentroid * 0.6
+      const posHue = (px+PARTICLE_SPREAD)/(PARTICLE_SPREAD*2)*0.15
+      const hue = (centroidHue + particleHue[i]*0.25 + posHue + cycleHue*0.3) % 1
+      const sat = 0.55 + smoothedRMS * 0.3 + onsetSplash * 0.15
+      const lit = TRAIL_BRIGHTNESS * ageNorm * fadeOut * (0.4 + smoothedRMS * 0.4 + onsetSplash * 0.25)
+      const [r,g,b] = hslToRgb(hue, Math.min(1, sat), Math.min(1, lit))
       colors[idx]=r; colors[idx+1]=g; colors[idx+2]=b
     }
   }

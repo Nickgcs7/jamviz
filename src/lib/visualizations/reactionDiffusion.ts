@@ -4,6 +4,15 @@
  * Two virtual chemicals interact to create Turing patterns that evolve in real-time.
  * Audio modulates feed/kill rates to shift between spots, stripes, labyrinths, and chaos.
  * Uses FBO ping-pong rendering (same pattern as fluid simulation).
+ * 
+ * Audio mapping:
+ *   - subBass/bass → feed rate (pattern density)
+ *   - mid → kill rate (pattern type: spots vs stripes vs labyrinth)
+ *   - treble/brilliance → kill rate fine-tuning
+ *   - spectralCentroid → display color palette position
+ *   - energyTrend → simulation speed (buildups accelerate pattern evolution)
+ *   - isOnset → seed injection (new pattern nucleation sites)
+ *   - beatIntensity → display glow intensity
  */
 
 import type { VisualizationMode, SceneObjects } from './types'
@@ -73,7 +82,10 @@ const displayShader = `
   uniform float uSpectralCentroid;
   uniform float uBeatIntensity;
   uniform float uEnergyTrend;
+  uniform float uRMS;
+  uniform float uOnsetIntensity;
   varying vec2 vUv;
+  
   vec3 hsl2rgb(float h, float s, float l) {
     float c = (1.0 - abs(2.0 * l - 1.0)) * s;
     float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
@@ -88,28 +100,46 @@ const displayShader = `
     else rgb = vec3(c, 0.0, x);
     return rgb + m;
   }
+  
   void main() {
     vec4 state = texture2D(uState, vUv);
     float B = state.g;
     float pattern = B;
+    
+    // Edge detection for structural highlighting
     vec2 texel = vec2(1.0 / 512.0);
     float bL = texture2D(uState, vUv - vec2(texel.x, 0.0)).g;
     float bR = texture2D(uState, vUv + vec2(texel.x, 0.0)).g;
     float bU = texture2D(uState, vUv + vec2(0.0, texel.y)).g;
     float bD = texture2D(uState, vUv - vec2(0.0, texel.y)).g;
     float edge = abs(bR - bL) + abs(bU - bD);
-    edge = smoothstep(0.0, 0.3, edge);
-    float lum = smoothstep(0.1, 0.5, pattern);
-    vec3 monoColor = vec3(lum * 0.9);
-    float hue = fract(edge * 2.0 + uTime * 0.02 + uSpectralCentroid * 0.3);
-    vec3 edgeColor = hsl2rgb(hue, 0.8, 0.6);
-    vec3 color = mix(monoColor, edgeColor, edge * 0.7);
-    color += vec3(0.05, 0.02, 0.08) * uBeatIntensity;
-    vec3 bg = vec3(0.01, 0.01, 0.02);
+    edge = smoothstep(0.0, 0.25, edge);
+    
+    float lum = smoothstep(0.08, 0.45, pattern);
+    
+    // Centroid-driven palette: low = warm magenta/amber, high = cool cyan/teal
+    float baseHue = fract(uSpectralCentroid * 0.5 + uTime * 0.015);
+    float edgeHue = fract(baseHue + edge * 1.5 + 0.1);
+    
+    vec3 patternColor = hsl2rgb(baseHue, 0.6 + uRMS * 0.3, lum * (0.5 + uRMS * 0.3));
+    vec3 edgeColor = hsl2rgb(edgeHue, 0.85, 0.55 + uOnsetIntensity * 0.2);
+    
+    vec3 color = mix(patternColor, edgeColor, edge * 0.7);
+    
+    // Beat/onset glow
+    color += vec3(0.06, 0.03, 0.09) * uBeatIntensity;
+    color += vec3(0.04, 0.06, 0.02) * uOnsetIntensity;
+    
+    // Background: energy trend brightens on buildups
+    float trendBright = max(0.0, uEnergyTrend) * 0.03;
+    vec3 bg = vec3(0.01 + trendBright, 0.01 + trendBright * 0.5, 0.02 + trendBright);
     color = mix(bg, color, smoothstep(0.05, 0.15, pattern));
+    
+    // Vignette
     vec2 center = vUv - 0.5;
     float vig = 1.0 - dot(center, center) * 0.6;
     color *= smoothstep(0.0, 1.0, vig);
+    
     gl_FragColor = vec4(color, 1.0);
   }
 `
@@ -235,7 +265,7 @@ export const reactionDiffusion: VisualizationMode = {
       uniforms: {
         uState: { value: null }, uTime: { value: 0 },
         uSpectralCentroid: { value: 0.5 }, uBeatIntensity: { value: 0 },
-        uEnergyTrend: { value: 0 },
+        uEnergyTrend: { value: 0 }, uRMS: { value: 0 }, uOnsetIntensity: { value: 0 },
       },
       depthTest: false, depthWrite: false
     })
@@ -254,25 +284,31 @@ export const reactionDiffusion: VisualizationMode = {
         if (!initialized) initializeState(renderer)
 
         const aspect = window.innerWidth / window.innerHeight
-        const baseFeed = 0.030 + bands.bassSmooth * 0.020
-        const baseKill = 0.055 + bands.midSmooth * 0.015
+        
+        // Feed rate: subBass + bass drive pattern density
+        const baseFeed = 0.028 + bands.subBassSmooth * 0.012 + bands.bassSmooth * 0.015
+        // Kill rate: mid sets pattern type, treble/brilliance fine-tune
+        const baseKill = 0.052 + bands.midSmooth * 0.018 + bands.trebleSmooth * 0.005 + bands.brillianceSmooth * 0.003
         
         reactionMat.uniforms.uState.value = stateFBO.read.texture
         reactionMat.uniforms.uFeed.value = baseFeed
         reactionMat.uniforms.uKill.value = baseKill
         
-        const stepsPerFrame = 8 + Math.floor(bands.overallSmooth * 8)
+        // Simulation speed: buildups (positive energyTrend) accelerate evolution
+        const trendSpeed = Math.max(0, bands.energyTrend) * 6
+        const stepsPerFrame = 8 + Math.floor(bands.overallSmooth * 8 + trendSpeed)
         for (let i = 0; i < stepsPerFrame; i++) {
           reactionMat.uniforms.uState.value = stateFBO.read.texture
           blit(renderer, reactionMat, stateFBO.write)
           stateFBO.swap()
         }
 
-        if (bands.isOnset && time - lastSeedTime > 0.5) {
+        // Onset → seed injection (new pattern nucleation)
+        if (bands.isOnset && time - lastSeedTime > 0.4) {
           lastSeedTime = time
           seedMat.uniforms.uState.value = stateFBO.read.texture
-          seedMat.uniforms.uPoint.value.set(0.3 + Math.random() * 0.4, 0.3 + Math.random() * 0.4)
-          seedMat.uniforms.uRadius.value = 0.02 + bands.onsetIntensity * 0.04
+          seedMat.uniforms.uPoint.value.set(0.2 + Math.random() * 0.6, 0.2 + Math.random() * 0.6)
+          seedMat.uniforms.uRadius.value = 0.015 + bands.onsetIntensity * 0.05
           seedMat.uniforms.uAspectRatio.value = aspect
           blit(renderer, seedMat, stateFBO.write)
           stateFBO.swap()
@@ -283,6 +319,8 @@ export const reactionDiffusion: VisualizationMode = {
         displayMat.uniforms.uSpectralCentroid.value = bands.spectralCentroid
         displayMat.uniforms.uBeatIntensity.value = bands.beatIntensity
         displayMat.uniforms.uEnergyTrend.value = bands.energyTrend
+        displayMat.uniforms.uRMS.value = bands.rms
+        displayMat.uniforms.uOnsetIntensity.value = bands.onsetIntensity
         renderer.setRenderTarget(null)
       },
       dispose: () => {
